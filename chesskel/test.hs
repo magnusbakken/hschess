@@ -6,15 +6,10 @@ module Chesskel.Test (
     testPromotion
 ) where
 
-import Control.Applicative
 import Chesskel.Data
+import Chesskel.Movement
+import Control.Applicative
 import Data.Maybe
-
-createCell :: File -> Rank -> Cell
-createCell file rank = Cell (file, rank)
-
-createMove :: Cell -> Cell -> Move
-createMove fromCell toCell = Move (fromCell, toCell)
 
 parseFile :: Char -> Maybe File
 parseFile 'a' = Just FileA
