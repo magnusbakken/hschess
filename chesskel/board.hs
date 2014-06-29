@@ -6,32 +6,19 @@ module Chesskel.Data (
     Rank (..),
     File (..),
     Cell (..),
-    Move (..),
-    PromotionTarget (..),
-    MoveContext (..),
-    CastlingDirection (..),
-    Castling,
-    CastlingData (..),
     Position,
-    PositionContext (..),
-    GameContext (..),
-    HeaderData (..),
-    MoveError (..),
-    Result (..),
     otherColor,
     createCell,
-    createMove,
     piecesOfColor,
+    allCells,
     getSquare,
     hasPiece,
     hasPieceOfType,
     hasPieceOfColor,
     emptyPosition,
-    startPosition,
+    standardPosition,
+    createPosition,
     updatePosition,
-    allCells,
-    allPromotionTargets,
-    getPieceForPromotionTarget,
     a1, b1, c1, d1, e1, f1, g1, h1,
     a2, b2, c2, d2, e2, f2, g2, h2,
     a3, b3, c3, d3, e3, f3, g3, h3,
@@ -56,66 +43,6 @@ newtype Position = Position (V.Vector Square) deriving (Eq)
 data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 deriving (Eq, Ord, Bounded, Show)
 data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH deriving (Eq, Ord, Bounded, Show)
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
-newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
-data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
-data CastlingData = CD {
-    castleRookFromCell :: Cell,
-    castleRookToCell :: Cell,
-    castlingSpec :: Castling
-} deriving (Eq)
-
-data MoveContext = MC {
-    mainFromCell :: Cell,
-    mainToCell :: Cell,
-    mainPiece :: Piece,
-    player :: Color,
-    isCapture :: Bool,
-    enPassantCell :: Maybe Cell,
-    castlingData :: Maybe CastlingData,
-    promotionTarget :: Maybe PromotionTarget
-} deriving (Eq)
-
-data CastlingDirection = Queenside | Kingside deriving (Eq, Show)
-type Castling = (CastlingDirection, Color)
-data PositionContext = PC {
-    position :: Position,
-    currentPlayer :: Color,
-    castlingRights :: [Castling],
-    moveCount :: Int,
-    halfMoveClock :: Int,
-    previousEnPassantCell :: Maybe Cell
-} deriving (Eq)
-
-data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
-
-data HeaderData = HD {
-    eventHeader :: String,
-    siteHeader :: String,
-    dateHeader :: String,
-    roundHeader :: String,
-    whiteHeader :: String,
-    blackHeader :: String,
-    resultHeader :: Result
-} deriving (Eq)
-
-data ExtraHeader = EH { headerName :: String, headerValue :: String } deriving (Eq)
-
-data GameContext = GC {
-    currentPosition :: PositionContext,
-    positions :: [PositionContext],
-    moves :: [MoveContext],
-    mainHeaderData :: HeaderData,
-    extraHeaderData :: [ExtraHeader]
-} deriving (Eq)
-
-data MoveError =
-    NoPieceAtSourceSquare |
-    PieceCannotReachSquare |
-    MoveWouldLeaveKingInCheck |
-    PromotionIsNeeded |
-    PromotionIsNotNeeded |
-    DoesNotHaveCastlingRights |
-    CastlingIsNotPossible deriving (Eq, Show)
 
 instance Enum Rank where
     fromEnum Rank1 = 1
@@ -161,42 +88,11 @@ instance Enum Cell where
         | n >= 0 && n < 64 = let (q, r) = n `quotRem` 8 in Cell (toEnum (r+1), toEnum (q+1))
         | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 63)"
 
-instance Enum Move where
-    fromEnum (Move (fromCell, toCell)) = (fromEnum fromCell * 64) + fromEnum toCell
-    toEnum n
-        | n >= 0 && n < 64*64 = let (q, r) = n `quotRem` 64 in createMove (toEnum q) (toEnum r)
-        | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 4095)"
-
 instance Show Cell where
     show (Cell (file, rank)) = [shortFile file, shortRank rank]
 
-instance Show Move where
-    show (Move (fromCell, toCell)) = show fromCell ++ "-" ++ show toCell
-
 instance Show Position where
     show = unlines . map showRow . reverse . getRows
-
-instance Show PositionContext where
-    show pc = shows (position pc) ("\n" ++ showPlayerToMove pc)
-
-instance Show Result where
-    show WhiteWin = "1-0"
-    show Draw = "1/2-1/2"
-    show BlackWin = "0-1"
-    show Ongoing = "*"
-
-instance Show HeaderData where
-    show headerData =
-        "[Event \"" ++ eventHeader headerData ++ "\"]\n" ++
-        "[Site \"" ++ siteHeader headerData ++ "\"]\n" ++
-        "[Date \"" ++ dateHeader headerData ++ "\"]\n" ++
-        "[Round \"" ++ roundHeader headerData ++ "\"]\n" ++
-        "[White \"" ++ whiteHeader headerData ++ "\"]\n" ++
-        "[Black \"" ++ blackHeader headerData ++ "\"]\n" ++
-        "[Result \"" ++ show (resultHeader headerData) ++ "\"]"
-
-instance Show ExtraHeader where
-    show (EH { headerName = name, headerValue = value }) = "[" ++ name ++ " \"" ++ value ++ "\"]"
 
 a1, b1, c1, d1, e1, f1, g1, h1 :: Cell
 a2, b2, c2, d2, e2, f2, g2, h2 :: Cell
@@ -275,16 +171,6 @@ otherColor :: Color -> Color
 otherColor White = Black
 otherColor Black = White
 
-allCastlingRights :: [Castling]
-allCastlingRights = [
-    (Queenside, White),
-    (Kingside, White),
-    (Queenside, Black),
-    (Kingside, Black)]
-
-allPromotionTargets :: [PromotionTarget]
-allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
-
 shortFile :: File -> Char
 shortFile FileA = 'a'
 shortFile FileB = 'b'
@@ -305,12 +191,6 @@ shortRank Rank6 = '6'
 shortRank Rank7 = '7'
 shortRank Rank8 = '8'
 
-getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece
-getPieceForPromotionTarget color PKnight = (Knight, color)
-getPieceForPromotionTarget color PBishop = (Bishop, color)
-getPieceForPromotionTarget color PRook = (Rook, color)
-getPieceForPromotionTarget color PQueen = (Queen, color)
-
 showPiece :: Piece -> String
 showPiece (Pawn, color) = colorize "P" color
 showPiece (Knight, color) = colorize "N" color
@@ -329,10 +209,6 @@ showSquare (Just piece) = showPiece piece
 showRow :: [Square] -> String
 showRow = unwords . map showSquare
 
-showPlayerToMove :: PositionContext -> String
-showPlayerToMove PC { currentPlayer = White } = "White to move"
-showPlayerToMove PC { currentPlayer = Black } = "Black to move"
-
 startRows :: [[Square]]
 startRows = [backRow White, pawnRow White, emptyRow, emptyRow, emptyRow, emptyRow, pawnRow Black, backRow Black]
 
@@ -350,9 +226,6 @@ getRows (Position vector) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
 
 createCell :: File -> Rank -> Cell
 createCell file rank = Cell (file, rank)
-
-createMove :: Cell -> Cell -> Move
-createMove fromCell toCell = Move (fromCell, toCell)
 
 allCells :: [Cell]
 allCells = enumFromTo minBound maxBound
@@ -382,17 +255,13 @@ piecesOfColor :: Color -> Position -> [(Cell, Piece)]
 piecesOfColor color pos = filter (isColor color . snd) (cellsAndPieces pos)
 
 emptyPosition :: Position
-emptyPosition = Position $ V.fromListN 64 $ repeat Nothing
+emptyPosition = createPosition $ repeat Nothing
 
-startPosition :: PositionContext
-startPosition = PC {
-    position = Position $ V.fromListN 64 $ concat startRows,
-    currentPlayer = White,
-    castlingRights = allCastlingRights,
-    moveCount = 0,
-    halfMoveClock = 0,
-    previousEnPassantCell = Nothing
-}
+standardPosition :: Position
+standardPosition = createPosition $ concat startRows
+
+createPosition :: [Square] -> Position
+createPosition pos = Position $ V.fromListN 64 pos
 
 updatePosition :: Position -> [(Cell, Square)] -> Position
 updatePosition (Position vector) updates = Position $ vector V.// map (first fromEnum) updates

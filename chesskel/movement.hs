@@ -1,7 +1,20 @@
 module Chesskel.Movement (
+    Move (..),
+    MoveContext (..),
+    PositionContext (..),
+    GameContext (..),
+    HeaderData (..),
+    MoveError (..),
+    Result (..),
+    PromotionTarget (..),
+    CastlingDirection (..),
+    Castling,
+    CastlingData (..),
+    createMove,
+    allPromotionTargets,
+    getPieceForPromotionTarget,
     isCheckmate,
     isStalemate,
-    emptyPosition,
     startPosition,
     makeMove,
     makeNonPromotionMove,
@@ -25,6 +38,131 @@ import Control.Monad
 import Data.Either
 import Data.Maybe
 import qualified Data.List as L
+
+newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
+data MoveContext = MC {
+    mainFromCell :: Cell,
+    mainToCell :: Cell,
+    mainPiece :: Piece,
+    player :: Color,
+    isCapture :: Bool,
+    enPassantCell :: Maybe Cell,
+    castlingData :: Maybe CastlingData,
+    promotionTarget :: Maybe PromotionTarget
+} deriving (Eq)
+
+data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
+data CastlingData = CD {
+    castleRookFromCell :: Cell,
+    castleRookToCell :: Cell,
+    castlingSpec :: Castling
+} deriving (Eq)
+
+data CastlingDirection = Queenside | Kingside deriving (Eq, Show)
+type Castling = (CastlingDirection, Color)
+data PositionContext = PC {
+    position :: Position,
+    currentPlayer :: Color,
+    castlingRights :: [Castling],
+    moveCount :: Int,
+    halfMoveClock :: Int,
+    previousEnPassantCell :: Maybe Cell
+} deriving (Eq)
+
+data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
+
+data HeaderData = HD {
+    eventHeader :: String,
+    siteHeader :: String,
+    dateHeader :: String,
+    roundHeader :: String,
+    whiteHeader :: String,
+    blackHeader :: String,
+    resultHeader :: Result
+} deriving (Eq)
+
+data ExtraHeader = EH { headerName :: String, headerValue :: String } deriving (Eq)
+
+data GameContext = GC {
+    currentPosition :: PositionContext,
+    positions :: [PositionContext],
+    moves :: [MoveContext],
+    mainHeaderData :: HeaderData,
+    extraHeaderData :: [ExtraHeader]
+} deriving (Eq)
+
+data MoveError =
+    NoPieceAtSourceSquare |
+    PieceCannotReachSquare |
+    MoveWouldLeaveKingInCheck |
+    PromotionIsNeeded |
+    PromotionIsNotNeeded |
+    DoesNotHaveCastlingRights |
+    CastlingIsNotPossible deriving (Eq, Show)
+
+instance Enum Move where
+    fromEnum (Move (fromCell, toCell)) = (fromEnum fromCell * 64) + fromEnum toCell
+    toEnum n
+        | n >= 0 && n < 64*64 = let (q, r) = n `quotRem` 64 in createMove (toEnum q) (toEnum r)
+        | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 4095)"
+
+instance Show Move where
+    show (Move (fromCell, toCell)) = show fromCell ++ "-" ++ show toCell
+
+instance Show PositionContext where
+    show pc = shows (position pc) ("\n" ++ showPlayerToMove pc)
+
+instance Show Result where
+    show WhiteWin = "1-0"
+    show Draw = "1/2-1/2"
+    show BlackWin = "0-1"
+    show Ongoing = "*"
+
+instance Show HeaderData where
+    show headerData =
+        "[Event \"" ++ eventHeader headerData ++ "\"]\n" ++
+        "[Site \"" ++ siteHeader headerData ++ "\"]\n" ++
+        "[Date \"" ++ dateHeader headerData ++ "\"]\n" ++
+        "[Round \"" ++ roundHeader headerData ++ "\"]\n" ++
+        "[White \"" ++ whiteHeader headerData ++ "\"]\n" ++
+        "[Black \"" ++ blackHeader headerData ++ "\"]\n" ++
+        "[Result \"" ++ show (resultHeader headerData) ++ "\"]"
+
+instance Show ExtraHeader where
+    show (EH { headerName = name, headerValue = value }) = "[" ++ name ++ " \"" ++ value ++ "\"]"
+
+allPromotionTargets :: [PromotionTarget]
+allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
+
+allCastlingRights :: [Castling]
+allCastlingRights = [
+    (Queenside, White),
+    (Kingside, White),
+    (Queenside, Black),
+    (Kingside, Black)]
+
+showPlayerToMove :: PositionContext -> String
+showPlayerToMove PC { currentPlayer = White } = "White to move"
+showPlayerToMove PC { currentPlayer = Black } = "Black to move"
+
+createMove :: Cell -> Cell -> Move
+createMove fromCell toCell = Move (fromCell, toCell)
+
+startPosition :: PositionContext
+startPosition = PC {
+    position = standardPosition,
+    currentPlayer = White,
+    castlingRights = allCastlingRights,
+    moveCount = 0,
+    halfMoveClock = 0,
+    previousEnPassantCell = Nothing
+}
+
+getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece
+getPieceForPromotionTarget color PKnight = (Knight, color)
+getPieceForPromotionTarget color PBishop = (Bishop, color)
+getPieceForPromotionTarget color PRook = (Rook, color)
+getPieceForPromotionTarget color PQueen = (Queen, color)
 
 makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError PositionContext
 makeMove pc move mpt = fmap (movePiece pc) (getMoveContext pc move mpt)
@@ -361,9 +499,6 @@ findLegalMoves pc (fromCell, piece) = do
 
 findAllLegalMoves :: PositionContext -> [MoveContext]
 findAllLegalMoves pc = concatMap (findLegalMoves pc) (piecesOfColor (currentPlayer pc) (position pc))
-
-extractMainMove :: MoveContext -> Move
-extractMainMove mc = createMove (mainFromCell mc) (mainToCell mc)
 
 isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
 isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt
