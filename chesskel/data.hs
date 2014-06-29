@@ -1,14 +1,21 @@
-module HsChess.Data (
+module Chesskel.Data (
     Piece,
+    Chessman (..),
     Color (..),
     Square,
     Rank (..),
     File (..),
     Cell (..),
-    Move,
-    MoveContext,
-    PositionContext,
-    GameContext,
+    Move (..),
+    PromotionTarget (..),
+    MoveContext (..),
+    PositionContext (..),
+    GameContext (..),
+    getSquare,
+    hasPiece,
+    hasPieceOfType,
+    isCheckmate,
+    isStalemate,
     emptyPosition,
     startPosition,
     makeMove,
@@ -187,6 +194,79 @@ instance Show HeaderData where
 instance Show ExtraHeader where
     show (EH { headerName = name, headerValue = value }) = "[" ++ name ++ " \"" ++ value ++ "\"]"
 
+a1, b1, c1, d1, e1, f1, g1, h1 :: Cell
+a2, b2, c2, d2, e2, f2, g2, h2 :: Cell
+a3, b3, c3, d3, e3, f3, g3, h3 :: Cell
+a4, b4, c4, d4, e4, f4, g4, h4 :: Cell
+a5, b5, c5, d5, e5, f5, g5, h5 :: Cell
+a6, b6, c6, d6, e6, f6, g6, h6 :: Cell
+a7, b7, c7, d7, e7, f7, g7, h7 :: Cell
+a8, b8, c8, d8, e8, f8, g8, h8 :: Cell
+a1 = Cell (FileA, Rank1)
+b1 = Cell (FileB, Rank1)
+c1 = Cell (FileC, Rank1)
+d1 = Cell (FileD, Rank1)
+e1 = Cell (FileE, Rank1)
+f1 = Cell (FileF, Rank1)
+g1 = Cell (FileG, Rank1)
+h1 = Cell (FileH, Rank1)
+a2 = Cell (FileA, Rank2)
+b2 = Cell (FileB, Rank2)
+c2 = Cell (FileC, Rank2)
+d2 = Cell (FileD, Rank2)
+e2 = Cell (FileE, Rank2)
+f2 = Cell (FileF, Rank2)
+g2 = Cell (FileG, Rank2)
+h2 = Cell (FileH, Rank2)
+a3 = Cell (FileA, Rank3)
+b3 = Cell (FileB, Rank3)
+c3 = Cell (FileC, Rank3)
+d3 = Cell (FileD, Rank3)
+e3 = Cell (FileE, Rank3)
+f3 = Cell (FileF, Rank3)
+g3 = Cell (FileG, Rank3)
+h3 = Cell (FileH, Rank3)
+a4 = Cell (FileA, Rank4)
+b4 = Cell (FileB, Rank4)
+c4 = Cell (FileC, Rank4)
+d4 = Cell (FileD, Rank4)
+e4 = Cell (FileE, Rank4)
+f4 = Cell (FileF, Rank4)
+g4 = Cell (FileG, Rank4)
+h4 = Cell (FileH, Rank4)
+a5 = Cell (FileA, Rank5)
+b5 = Cell (FileB, Rank5)
+c5 = Cell (FileC, Rank5)
+d5 = Cell (FileD, Rank5)
+e5 = Cell (FileE, Rank5)
+f5 = Cell (FileF, Rank5)
+g5 = Cell (FileG, Rank5)
+h5 = Cell (FileH, Rank5)
+a6 = Cell (FileA, Rank6)
+b6 = Cell (FileB, Rank6)
+c6 = Cell (FileC, Rank6)
+d6 = Cell (FileD, Rank6)
+e6 = Cell (FileE, Rank6)
+f6 = Cell (FileF, Rank6)
+g6 = Cell (FileG, Rank6)
+h6 = Cell (FileH, Rank6)
+a7 = Cell (FileA, Rank7)
+b7 = Cell (FileB, Rank7)
+c7 = Cell (FileC, Rank7)
+d7 = Cell (FileD, Rank7)
+e7 = Cell (FileE, Rank7)
+f7 = Cell (FileF, Rank7)
+g7 = Cell (FileG, Rank7)
+h7 = Cell (FileH, Rank7)
+a8 = Cell (FileA, Rank8)
+b8 = Cell (FileB, Rank8)
+c8 = Cell (FileC, Rank8)
+d8 = Cell (FileD, Rank8)
+e8 = Cell (FileE, Rank8)
+f8 = Cell (FileF, Rank8)
+g8 = Cell (FileG, Rank8)
+h8 = Cell (FileH, Rank8)
+
 otherColor :: Color -> Color
 otherColor White = Black
 otherColor Black = White
@@ -200,6 +280,26 @@ allCastlingRights = [
 
 allPromotionTargets :: [PromotionTarget]
 allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
+
+shortFile :: File -> Char
+shortFile FileA = 'a'
+shortFile FileB = 'b'
+shortFile FileC = 'c'
+shortFile FileD = 'd'
+shortFile FileE = 'e'
+shortFile FileF = 'f'
+shortFile FileG = 'g'
+shortFile FileH = 'h'
+
+shortRank :: Rank -> Char
+shortRank Rank1 = '1'
+shortRank Rank2 = '2'
+shortRank Rank3 = '3'
+shortRank Rank4 = '4'
+shortRank Rank5 = '5'
+shortRank Rank6 = '6'
+shortRank Rank7 = '7'
+shortRank Rank8 = '8'
 
 getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece
 getPieceForPromotionTarget color PKnight = (Knight, color)
@@ -275,6 +375,24 @@ hasPiece pos cell = isJust $ getSquare pos cell
 hasPieceOfType :: Piece -> Position -> Cell -> Bool
 hasPieceOfType piece pos cell = maybe False (== piece) (getSquare pos cell)
 
+cellsAndSquares :: Position -> [(Cell, Square)]
+cellsAndSquares pos = map (\cell -> (cell, getSquare pos cell)) allCells 
+
+cellsAndPieces :: Position -> [(Cell, Piece)]
+cellsAndPieces = mapMaybe (\(cell, square) -> fmap ((,) cell) square) . cellsAndSquares
+
+isColor :: Color -> Piece -> Bool
+isColor color (_, pieceColor) = color == pieceColor
+
+hasPieceOfColor :: Color -> Position -> Cell -> Bool
+hasPieceOfColor color pos cell = maybe False (isColor color) (getSquare pos cell)
+
+cellHasPiece :: Position -> Cell -> Bool
+cellHasPiece pos cell = isJust $ getSquare pos cell
+
+piecesOfColor :: Color -> Position -> [(Cell, Piece)]
+piecesOfColor color pos = filter (isColor color . snd) (cellsAndPieces pos)
+
 makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError PositionContext
 makeMove pc move mpt = fmap (movePiece pc) (getMoveContext pc move mpt)
 
@@ -301,24 +419,6 @@ getMoveContext pc (Move (fromCell, toCell)) mpt = do
         promotionTarget = pt
     }
     maybe (Right mc) Left (getMoveError pc mc)
-
-a1, b1, c1, d1, e1, f1, g1, h1, a8, b8, c8, d8, e8, f8, g8, h8 :: Cell
-a1 = Cell (FileA, Rank1)
-b1 = Cell (FileB, Rank1)
-c1 = Cell (FileC, Rank1)
-d1 = Cell (FileD, Rank1)
-e1 = Cell (FileE, Rank1)
-f1 = Cell (FileF, Rank1)
-g1 = Cell (FileG, Rank1)
-h1 = Cell (FileH, Rank1)
-a8 = Cell (FileA, Rank8)
-b8 = Cell (FileB, Rank8)
-c8 = Cell (FileC, Rank8)
-d8 = Cell (FileD, Rank8)
-e8 = Cell (FileE, Rank8)
-f8 = Cell (FileF, Rank8)
-g8 = Cell (FileG, Rank8)
-h8 = Cell (FileH, Rank8)
 
 getCastlingDataIfNecessary :: PositionContext -> Piece -> Move -> Either MoveError (Maybe CastlingData)
 getCastlingDataIfNecessary pc piece move =
@@ -454,44 +554,6 @@ updatePreviousEnPassantCell (Pawn, White) (Move (Cell (file, Rank2), Cell (_, Ra
 updatePreviousEnPassantCell (Pawn, Black) (Move (Cell (file, Rank7), Cell (_, Rank5))) =
     Just (createCell file Rank6)
 updatePreviousEnPassantCell _ _ = Nothing
-
-shortFile :: File -> Char
-shortFile FileA = 'a'
-shortFile FileB = 'b'
-shortFile FileC = 'c'
-shortFile FileD = 'd'
-shortFile FileE = 'e'
-shortFile FileF = 'f'
-shortFile FileG = 'g'
-shortFile FileH = 'h'
-
-shortRank :: Rank -> Char
-shortRank Rank1 = '1'
-shortRank Rank2 = '2'
-shortRank Rank3 = '3'
-shortRank Rank4 = '4'
-shortRank Rank5 = '5'
-shortRank Rank6 = '6'
-shortRank Rank7 = '7'
-shortRank Rank8 = '8'
-
-cellsAndSquares :: Position -> [(Cell, Square)]
-cellsAndSquares pos = map (\cell -> (cell, getSquare pos cell)) allCells 
-
-cellsAndPieces :: Position -> [(Cell, Piece)]
-cellsAndPieces = mapMaybe (\(cell, square) -> fmap ((,) cell) square) . cellsAndSquares
-
-isColor :: Color -> Piece -> Bool
-isColor color (_, pieceColor) = color == pieceColor
-
-hasPieceOfColor :: Color -> Position -> Cell -> Bool
-hasPieceOfColor color pos cell = maybe False (isColor color) (getSquare pos cell)
-
-cellHasPiece :: Position -> Cell -> Bool
-cellHasPiece pos cell = isJust $ getSquare pos cell
-
-piecesOfColor :: Color -> Position -> [(Cell, Piece)]
-piecesOfColor color pos = filter (isColor color . snd) (cellsAndPieces pos)
 
 getMoveError :: PositionContext -> MoveContext -> Maybe MoveError
 getMoveError pc mc
@@ -757,102 +819,3 @@ maybeToEither e = maybe (Left e) Right
 isRight :: Either e a -> Bool -- Added to Data.Either in recent GHC version.
 isRight (Right _) = True
 isRight (Left _) = False
-
--- Test-related functions
-parseFile :: Char -> Maybe File
-parseFile 'a' = Just FileA
-parseFile 'b' = Just FileB
-parseFile 'c' = Just FileC
-parseFile 'd' = Just FileD
-parseFile 'e' = Just FileE
-parseFile 'f' = Just FileF
-parseFile 'g' = Just FileG
-parseFile 'h' = Just FileH
-parseFile _ = Nothing
-
-parseRank :: Char -> Maybe Rank
-parseRank '1' = Just Rank1
-parseRank '2' = Just Rank2
-parseRank '3' = Just Rank3
-parseRank '4' = Just Rank4
-parseRank '5' = Just Rank5
-parseRank '6' = Just Rank6
-parseRank '7' = Just Rank7
-parseRank '8' = Just Rank8
-parseRank _ = Nothing
-
-parseCell :: Char -> Char -> Maybe Cell
-parseCell file rank = createCell <$> parseFile file <*> parseRank rank
-
-readCell :: String -> Maybe Cell
-readCell (file:rank:[]) = parseCell file rank
-readCell _ = Nothing
-
-parsePiece :: Char -> Maybe Piece
-parsePiece 'P' = Just (Pawn, White)
-parsePiece 'N' = Just (Knight, White)
-parsePiece 'B' = Just (Bishop, White)
-parsePiece 'R' = Just (Rook, White)
-parsePiece 'Q' = Just (Queen, White)
-parsePiece 'K' = Just (King, White)
-parsePiece 'p' = Just (Pawn, Black)
-parsePiece 'n' = Just (Knight, Black)
-parsePiece 'b' = Just (Bishop, Black)
-parsePiece 'r' = Just (Rook, Black)
-parsePiece 'q' = Just (Queen, Black)
-parsePiece 'k' = Just (King, Black)
-parsePiece _ = Nothing
-
-readPiece :: String -> Maybe Piece
-readPiece (c:[]) = parsePiece c
-readPiece _ = Nothing
-
-readLongNotationMove :: String -> Maybe (Move, Maybe PromotionTarget)
-readLongNotationMove moveStr
-    | length moveStr == 5 = fmap (\move -> (move, Nothing)) (readMove firstFive)
-    | length moveStr == 6 = (\move pt -> (move, Just pt)) <$> readMove firstFive <*> readPromotionTarget sixth
-    | otherwise = Nothing where
-        firstFive = take 5 moveStr
-        sixth = moveStr !! 5
-
-readMove :: String -> Maybe Move
-readMove (fromFile:fromRank:'-':toFile:toRank:[]) =
-    createMove <$> parseCell fromFile fromRank <*> parseCell toFile toRank
-readMove _ = Nothing
-
-readPromotionTarget :: Char -> Maybe PromotionTarget
-readPromotionTarget 'n' = Just PKnight
-readPromotionTarget 'b' = Just PBishop
-readPromotionTarget 'r' = Just PRook
-readPromotionTarget 'q' = Just PQueen
-readPromotionTarget _ = Nothing
-
-testMove :: String -> PositionContext -> PositionContext
-testMove moveStr pc = fromJust $ do
-    (move, mpt) <- readLongNotationMove moveStr
-    case makeMove pc move mpt of
-        Left e -> error $ moveStr ++ ": " ++ show e
-        Right mc -> return mc
-
-testHasLegalMove :: String -> PositionContext -> Bool
-testHasLegalMove moveStr pc = maybe False (uncurry $ isLegalMove pc) (readLongNotationMove moveStr)
-
-testMoves :: PositionContext -> [String] -> PositionContext
-testMoves = foldl (flip testMove)
-
-testFromStart :: [String] -> PositionContext
-testFromStart = testMoves startPosition
-
-testHasPiece :: Char -> String -> PositionContext -> Bool
-testHasPiece pieceStr cellStr pc = fromMaybe False $ do
-    expectedPiece <- parsePiece pieceStr
-    cell <- readCell cellStr
-    actualPiece <- getSquare (position pc) cell
-    return $ expectedPiece == actualPiece
-
--- Tests:
-testCastling = testHasLegalMove "e1-g1" $ testFromStart ["g1-f3", "g8-f6", "g2-g3", "g7-g6", "f1-g2", "f8-g7"]
-testEnPassant = testHasLegalMove "e5-d6" $ testFromStart ["e2-e4", "g8-f6", "e4-e5", "d7-d5"]
-testCheckmate = isCheckmate $ testFromStart ["f2-f3", "e7-e6", "g2-g4", "d8-h4"]
-testStalemate = isStalemate $ testFromStart ["c2-c4", "h7-h5", "h2-h4", "a7-a5", "d1-a4", "a8-a6", "a4-a5", "a6-h6", "a5-c7", "f7-f6", "c7-d7", "e8-f7", "d7-b7", "d8-d3", "b7-b8", "d3-h7", "b8-c8", "f7-g6", "c8-e6"]
-testPromotion = testHasPiece 'Q' "a8" $ testFromStart ["a2-a4", "b7-b5", "a4-b5", "a7-a6", "b5-a6", "b8-c6", "a6-a7", "a8-b8", "a7-a8q"]

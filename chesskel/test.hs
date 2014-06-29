@@ -7,8 +7,15 @@ module Chesskel.Test (
 ) where
 
 import Control.Applicative
+import Chesskel.Data
+import Data.Maybe
 
--- Test-related functions
+createCell :: File -> Rank -> Cell
+createCell file rank = Cell (file, rank)
+
+createMove :: Cell -> Cell -> Move
+createMove fromCell toCell = Move (fromCell, toCell)
+
 parseFile :: Char -> Maybe File
 parseFile 'a' = Just FileA
 parseFile 'b' = Just FileB
