@@ -32,7 +32,7 @@ module Chesskel.Movement (
     draw
 ) where
 
-import Chesskel.Data
+import Chesskel.Board
 import Control.Applicative
 import Control.Monad
 import Data.Either

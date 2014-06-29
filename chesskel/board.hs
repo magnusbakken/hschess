@@ -1,4 +1,4 @@
-module Chesskel.Data (
+module Chesskel.Board (
     Piece,
     Chessman (..),
     Color (..),
@@ -171,6 +171,9 @@ otherColor :: Color -> Color
 otherColor White = Black
 otherColor Black = White
 
+isColor :: Color -> Piece -> Bool
+isColor color (_, pieceColor) = color == pieceColor
+
 shortFile :: File -> Char
 shortFile FileA = 'a'
 shortFile FileB = 'b'
@@ -234,22 +237,22 @@ getSquare :: Position -> Cell -> Square
 getSquare (Position vector) cell = vector V.! fromEnum cell
 
 hasPiece :: Position -> Cell -> Bool
-hasPiece pos cell = isJust $ getSquare pos cell
+hasPiece = hasPieceBy (const True)
 
 hasPieceOfType :: Piece -> Position -> Cell -> Bool
-hasPieceOfType piece pos cell = maybe False (== piece) (getSquare pos cell)
+hasPieceOfType piece = hasPieceBy (== piece)
+
+hasPieceOfColor :: Color -> Position -> Cell -> Bool
+hasPieceOfColor color = hasPieceBy (isColor color)
+
+hasPieceBy :: (Piece -> Bool) -> Position -> Cell -> Bool
+hasPieceBy predicate pos cell = maybe False predicate (getSquare pos cell)
 
 cellsAndSquares :: Position -> [(Cell, Square)]
 cellsAndSquares pos = map (\cell -> (cell, getSquare pos cell)) allCells 
 
 cellsAndPieces :: Position -> [(Cell, Piece)]
 cellsAndPieces = mapMaybe (\(cell, square) -> fmap ((,) cell) square) . cellsAndSquares
-
-isColor :: Color -> Piece -> Bool
-isColor color (_, pieceColor) = color == pieceColor
-
-hasPieceOfColor :: Color -> Position -> Cell -> Bool
-hasPieceOfColor color pos cell = maybe False (isColor color) (getSquare pos cell)
 
 piecesOfColor :: Color -> Position -> [(Cell, Piece)]
 piecesOfColor color pos = filter (isColor color . snd) (cellsAndPieces pos)
@@ -261,7 +264,7 @@ standardPosition :: Position
 standardPosition = createPosition $ concat startRows
 
 createPosition :: [Square] -> Position
-createPosition pos = Position $ V.fromListN 64 pos
+createPosition = Position . V.fromListN 64
 
 updatePosition :: Position -> [(Cell, Square)] -> Position
 updatePosition (Position vector) updates = Position $ vector V.// map (first fromEnum) updates

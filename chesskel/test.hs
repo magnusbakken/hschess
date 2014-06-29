@@ -6,7 +6,7 @@ module Chesskel.Test (
     testPromotion
 ) where
 
-import Chesskel.Data
+import Chesskel.Board
 import Chesskel.Movement
 import Control.Applicative
 import Data.Maybe
