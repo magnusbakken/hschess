@@ -371,37 +371,37 @@ translateMove pc pgnMove = do
         safeGetPromotionTarget (CastleMove _) = Nothing
         safeGetPromotionTarget mv = pgnPromotionTarget mv
 
-interpretMove :: GameContext -> PgnMove -> Either PgnError GameContext
-interpretMove gc pgnMove = do
+interpretMove :: PgnMove -> GameContext -> Either PgnError GameContext
+interpretMove pgnMove gc = do
     (move, mPromotionTarget) <- translateMove (currentPosition gc) pgnMove
     mapGameplayError (playMove move mPromotionTarget gc)
 
 -- We currently don't support partial games, i.e. games where the first move in the text isn't move 1.
-interpretGame :: AllHeaderData -> GameToken -> Either PgnError GameContext
-interpretGame hd EmptyGame = return (startGame startPosition hd)
-interpretGame hd (Game moveNumberToken) = interpretMoveNumber (startGame startPosition hd) moveNumberToken
+interpretGame :: GameToken -> AllHeaderData -> Either PgnError GameContext
+interpretGame EmptyGame hd = return (startGame startPosition hd)
+interpretGame (Game moveNumberToken) hd = interpretMoveNumber moveNumberToken (startGame startPosition hd)
 
-interpretGameResult :: GameContext -> GameResultToken -> GameContext
-interpretGameResult gc (GameResult res) = setResult res gc
+interpretGameResult :: GameResultToken -> GameContext -> GameContext
+interpretGameResult (GameResult res) gc = setResult res gc
 
 -- We also don't do any validation of the move numbers yet.
-interpretMoveNumber :: GameContext -> MoveNumberToken -> Either PgnError GameContext
-interpretMoveNumber gc (FinalMoveNumber _ resultToken) = return $ interpretGameResult gc resultToken
-interpretMoveNumber gc (MoveNumber _ whiteMoveToken) = interpretWhiteMove gc whiteMoveToken
+interpretMoveNumber :: MoveNumberToken -> GameContext -> Either PgnError GameContext
+interpretMoveNumber (FinalMoveNumber _ resultToken) gc = return $ interpretGameResult resultToken gc
+interpretMoveNumber (MoveNumber _ whiteMoveToken) gc = interpretWhiteMove whiteMoveToken gc
 
-interpretWhiteMove :: GameContext -> WhiteMoveToken -> Either PgnError GameContext
-interpretWhiteMove gc (FinalWhiteMove mv resultToken) = interpretFinalMove gc mv resultToken
-interpretWhiteMove gc (WhiteMove mv blackMoveToken) = interpretMove gc mv >>= \gc' -> interpretBlackMove gc' blackMoveToken
+interpretWhiteMove :: WhiteMoveToken -> GameContext -> Either PgnError GameContext
+interpretWhiteMove (FinalWhiteMove mv resultToken) gc = interpretFinalMove resultToken mv gc
+interpretWhiteMove (WhiteMove mv blackMoveToken) gc = interpretMove mv gc >>= interpretBlackMove blackMoveToken
 
-interpretBlackMove :: GameContext -> BlackMoveToken -> Either PgnError GameContext
-interpretBlackMove gc (FinalBlackMove mv resultToken) = interpretFinalMove gc mv resultToken
-interpretBlackMove gc (BlackMove mv moveNumberToken) = interpretMove gc mv >>= \gc' -> interpretMoveNumber gc' moveNumberToken
+interpretBlackMove :: BlackMoveToken -> GameContext -> Either PgnError GameContext
+interpretBlackMove (FinalBlackMove mv resultToken) gc = interpretFinalMove resultToken mv gc
+interpretBlackMove (BlackMove mv moveNumberToken) gc = interpretMove mv gc >>= interpretMoveNumber moveNumberToken
 
-interpretFinalMove :: GameContext -> PgnMove -> GameResultToken -> Either PgnError GameContext
-interpretFinalMove gc mv resultToken = interpretMove gc mv >>= \gc' -> return $ interpretGameResult gc' resultToken
+interpretFinalMove :: GameResultToken -> PgnMove -> GameContext -> Either PgnError GameContext
+interpretFinalMove resultToken mv gc = interpretMove mv gc >>= return . interpretGameResult resultToken
 
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do
     (headerTokens, gameToken) <- mapSyntaxError (parse pgn "ReadPgn" pgnString)
     allHeaderData <- interpretHeaders headerTokens
-    interpretGame allHeaderData gameToken
+    interpretGame gameToken allHeaderData
