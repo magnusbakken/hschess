@@ -49,7 +49,7 @@ data CastlingData = CD {
     castlingSpec :: Castling
 } deriving (Eq)
 
-data CastlingDirection = Queenside | Kingside deriving (Eq, Show)
+data CastlingDirection = Queenside | Kingside deriving (Eq)
 type Castling = (CastlingDirection, Color)
 data PositionContext = PC {
     position :: Position,
@@ -74,6 +74,10 @@ instance Enum Move where
     toEnum n
         | n >= 0 && n < 64*64 = let (q, r) = n `quotRem` 64 in createMove (toEnum q) (toEnum r)
         | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 4095)"
+
+instance Show CastlingDirection where
+    show Kingside = "O-O"
+    show Queenside = "O-O-O"
 
 instance Show Move where
     show (Move (fromCell, toCell)) = show fromCell ++ "-" ++ show toCell
@@ -354,7 +358,7 @@ isValidDoublePawnMove color pos (Move (Cell (fromFile, fromRank), Cell (toFile, 
 isValidPawnCapture :: Color -> Position -> Move -> Bool
 isValidPawnCapture color pos (Move (fromCell, toCell)) =
     isValidPawnCapture' color (createMove fromCell toCell) &&
-    hasPieceOfColor Black pos toCell
+    hasPieceOfColor (otherColor color) pos toCell
 
 isValidEnPassantCapture :: PositionContext -> Move -> Bool
 isValidEnPassantCapture pc (Move (fromCell, toCell)) =
@@ -426,10 +430,10 @@ findKing color pos = fst . head $ filter isKing (piecesOfColor color pos) where
 
 anyPieceAttacks :: Color -> Position -> Cell -> Bool
 anyPieceAttacks color pos targetCell =
-  let pieces = piecesOfColor color pos
-      f (cell, piece) = (piece, createMove cell targetCell)
-      attackingMoves = map f pieces in
-  any (uncurry (pieceAttacks pos)) attackingMoves
+    let pieces = piecesOfColor color pos
+        f (cell, piece) = (piece, createMove cell targetCell)
+        attackingMoves = map f pieces in
+    any (uncurry (pieceAttacks pos)) attackingMoves
 
 isMoveCapture :: Position -> Move -> Bool
 isMoveCapture pos (Move (_, toCell)) = hasPiece pos toCell

@@ -7,6 +7,7 @@ module Chesskel.Test (
 ) where
 
 import Chesskel.Board
+import Chesskel.Formats.Pgn
 import Chesskel.Movement
 import Control.Applicative
 import Data.Maybe

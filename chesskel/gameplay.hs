@@ -1,14 +1,18 @@
 module Chesskel.Gameplay (
     GameContext (..),
     HeaderData (..),
+    AllHeaderData,
+    ExtraHeader (..),
     Result (..),
+    unknownHeaderData,
     startStandardGame,
     startGame,
     playMove,
     playNonPromotionMove,
     playPromotion,
     resign,
-    draw
+    makeDraw,
+    setResult
 ) where
 
 import Chesskel.Board
@@ -16,6 +20,8 @@ import Chesskel.Movement
 
 data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
 
+-- This is sometimes known as the "Seven Tag Roster", or SRT.
+-- These headers are considered obligatory for all games.
 data HeaderData = HD {
     eventHeader :: String,
     siteHeader :: String,
@@ -27,6 +33,7 @@ data HeaderData = HD {
 } deriving (Eq)
 
 data ExtraHeader = EH { headerName :: String, headerValue :: String } deriving (Eq)
+type AllHeaderData = (HeaderData, [ExtraHeader])
 
 data GameContext = GC {
     currentPosition :: PositionContext,
@@ -57,25 +64,25 @@ instance Show ExtraHeader where
 
 unknownHeaderData :: HeaderData
 unknownHeaderData = HD {
-    eventHeader = "Haskell chess",
-    siteHeader = "Unknown",
-    dateHeader = "Unknown", -- We'd fill in today's date here, but then we'd have to be in the IO monad.
-    roundHeader = "Unknown",
-    whiteHeader = "Unknown",
-    blackHeader = "Unknown",
+    eventHeader = "?",
+    siteHeader = "?",
+    dateHeader = "?",
+    roundHeader = "?",
+    whiteHeader = "?",
+    blackHeader = "?",
     resultHeader = Ongoing
 }
 
 startStandardGame :: GameContext
-startStandardGame = startGame startPosition unknownHeaderData
+startStandardGame = startGame startPosition (unknownHeaderData, [])
 
-startGame :: PositionContext -> HeaderData -> GameContext
-startGame pc hd = GC {
+startGame :: PositionContext -> AllHeaderData -> GameContext
+startGame pc (hd, extra) = GC {
     currentPosition = pc,
     positions = [],
     moves = [],
     mainHeaderData = hd,
-    extraHeaderData = []
+    extraHeaderData = extra
 }
 
 playMove :: Move -> Maybe PromotionTarget -> GameContext -> Either MoveError GameContext
@@ -90,13 +97,15 @@ playPromotion :: Move -> PromotionTarget -> GameContext -> Either MoveError Game
 playPromotion move pt = playMove move (Just pt)
 
 resign :: Color -> GameContext -> GameContext
-resign color gc = gc {
-    mainHeaderData = setWinner (otherColor color) (mainHeaderData gc)
-}
+resign White = setResult BlackWin
+resign Black = setResult WhiteWin
 
-draw :: GameContext -> GameContext
-draw gc = gc {
-    mainHeaderData = setDraw (mainHeaderData gc)
+makeDraw :: GameContext -> GameContext
+makeDraw = setResult Draw
+
+setResult :: Result -> GameContext -> GameContext
+setResult result gc = gc {
+    mainHeaderData = setResultHeader result (mainHeaderData gc)
 }
 
 updateGameContext :: MoveContext -> PositionContext -> GameContext -> GameContext
@@ -114,11 +123,11 @@ updateHeaderDataIfFinished pc hd
     | otherwise = hd
 
 setWinner :: Color -> HeaderData -> HeaderData
-setWinner White = setResult WhiteWin
-setWinner Black = setResult BlackWin
+setWinner White = setResultHeader WhiteWin
+setWinner Black = setResultHeader BlackWin
 
 setDraw :: HeaderData -> HeaderData
-setDraw = setResult Draw
+setDraw = setResultHeader Draw
 
-setResult :: Result -> HeaderData -> HeaderData
-setResult result hd = hd { resultHeader = result }
+setResultHeader :: Result -> HeaderData -> HeaderData
+setResultHeader result hd = hd { resultHeader = result }
