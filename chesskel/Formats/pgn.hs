@@ -6,6 +6,7 @@ module Chesskel.Formats.Pgn (
 
 import Chesskel.Board
 import Chesskel.Movement
+import Chesskel.Formats.Common
 import Chesskel.Gameplay
 import Control.Applicative hiding ((<|>), many)
 import Control.Monad
@@ -138,28 +139,6 @@ instance Show PgnMove where
         sCheck Check = showString "+"
         sCheck Checkmate = showString "#"
         showEmpty = showString ""
-
-fileA = FileA <$ char 'a'
-fileB = FileB <$ char 'b'
-fileC = FileC <$ char 'c'
-fileD = FileD <$ char 'd'
-fileE = FileE <$ char 'e'
-fileF = FileF <$ char 'f'
-fileG = FileG <$ char 'g'
-fileH = FileH <$ char 'h'
-file = fileA <|> fileB <|> fileC <|> fileD <|> fileE <|> fileF <|> fileG <|> fileH
-
-rank1 = Rank1 <$ char '1'
-rank2 = Rank2 <$ char '2'
-rank3 = Rank3 <$ char '3'
-rank4 = Rank4 <$ char '4'
-rank5 = Rank5 <$ char '5'
-rank6 = Rank6 <$ char '6'
-rank7 = Rank7 <$ char '7'
-rank8 = Rank8 <$ char '8'
-rank = rank1 <|> rank2 <|> rank3 <|> rank4 <|> rank5 <|> rank6 <|> rank7 <|> rank8
-
-cell = createCell <$> file <*> rank
 
 king = King <$ char 'K'
 queen = Queen <$ char 'Q'
@@ -382,7 +361,7 @@ interpretGame EmptyGame hd = return (startGame startPosition hd)
 interpretGame (Game moveNumberToken) hd = interpretMoveNumber moveNumberToken (startGame startPosition hd)
 
 interpretGameResult :: GameResultToken -> GameContext -> GameContext
-interpretGameResult (GameResult res) gc = setResult res gc
+interpretGameResult (GameResult res) = setResult res
 
 -- We also don't do any validation of the move numbers yet.
 interpretMoveNumber :: MoveNumberToken -> GameContext -> Either PgnError GameContext
@@ -398,7 +377,7 @@ interpretBlackMove (FinalBlackMove mv resultToken) gc = interpretFinalMove resul
 interpretBlackMove (BlackMove mv moveNumberToken) gc = interpretMove mv gc >>= interpretMoveNumber moveNumberToken
 
 interpretFinalMove :: GameResultToken -> PgnMove -> GameContext -> Either PgnError GameContext
-interpretFinalMove resultToken mv gc = interpretMove mv gc >>= return . interpretGameResult resultToken
+interpretFinalMove resultToken mv gc = interpretGameResult resultToken <$> interpretMove mv gc
 
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do

@@ -35,7 +35,7 @@ import Data.Maybe
 import qualified Data.Vector as V
 
 data Chessman = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
-data Color = White | Black deriving (Eq, Show)
+data Color = White | Black deriving (Eq, Ord, Show)
 type Piece = (Chessman, Color)
 type Square = Maybe Piece
 newtype Position = Position (V.Vector Square) deriving (Eq)

@@ -28,7 +28,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Either
 import Data.Maybe
-import qualified Data.List as L
+import qualified Data.Set as S
 
 newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
 data MoveContext = MC {
@@ -49,15 +49,15 @@ data CastlingData = CD {
     castlingSpec :: Castling
 } deriving (Eq)
 
-data CastlingDirection = Queenside | Kingside deriving (Eq)
+data CastlingDirection = Kingside | Queenside deriving (Eq, Ord)
 type Castling = (CastlingDirection, Color)
 data PositionContext = PC {
     position :: Position,
     currentPlayer :: Color,
-    castlingRights :: [Castling],
-    moveCount :: Int,
+    castlingRights :: S.Set Castling,
+    previousEnPassantCell :: Maybe Cell,
     halfMoveClock :: Int,
-    previousEnPassantCell :: Maybe Cell
+    moveCount :: Int
 } deriving (Eq)
 
 data MoveError =
@@ -88,12 +88,12 @@ instance Show PositionContext where
 allPromotionTargets :: [PromotionTarget]
 allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
 
-allCastlingRights :: [Castling]
-allCastlingRights = [
-    (Queenside, White),
+allCastlingRights :: S.Set Castling
+allCastlingRights = S.fromList [
     (Kingside, White),
-    (Queenside, Black),
-    (Kingside, Black)]
+    (Kingside, Black),
+    (Queenside, White),
+    (Queenside, Black)]
 
 showPlayerToMove :: PositionContext -> String
 showPlayerToMove PC { currentPlayer = White } = "White to move"
@@ -107,9 +107,9 @@ startPosition = PC {
     position = standardPosition,
     currentPlayer = White,
     castlingRights = allCastlingRights,
-    moveCount = 0,
+    previousEnPassantCell = Nothing,
     halfMoveClock = 0,
-    previousEnPassantCell = Nothing
+    moveCount = 1
 }
 
 getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece
@@ -154,7 +154,7 @@ getCastlingDataIfNecessary pc piece move =
 
 getCastlingDataOrError :: PositionContext -> Castling -> Either MoveError CastlingData
 getCastlingDataOrError pc castling
-    | castling `notElem` castlingRights pc = Left DoesNotHaveCastlingRights
+    | castling `S.member` castlingRights pc = Left DoesNotHaveCastlingRights
     | otherwise = maybeToEither CastlingIsNotPossible $ do
         let (Move (fromCell, toCell)) = getRookCastlingMove castling
         guard $ validateKingForCastling pc castling
@@ -173,13 +173,13 @@ getCastling _ _ = Nothing
 
 validateKingForCastling :: PositionContext -> Castling -> Bool
 validateKingForCastling pc castling
-  | isKingInCheck current (position pc) = False
-  | any (hasPiece (position pc)) kingJourneyCells = False
-  | any (anyPieceAttacks opponent (position pc)) kingJourneyCells = False
-  | otherwise = True
-    where current = currentPlayer pc
-          opponent = otherColor current
-          kingJourneyCells = kingCastlingJourneyCells castling
+    | isKingInCheck current (position pc) = False
+    | any (hasPiece (position pc)) kingJourneyCells = False
+    | any (anyPieceAttacks opponent (position pc)) kingJourneyCells = False
+    | otherwise = True where
+        current = currentPlayer pc
+        opponent = otherColor current
+        kingJourneyCells = kingCastlingJourneyCells castling
 
 -- Chess960 incompatible
 kingCastlingJourneyCells :: Castling -> [Cell]
@@ -231,9 +231,9 @@ movePiece pc mc =
         position = updatePosition (position pc) (getPositionUpdates mc),
         currentPlayer = otherColor (currentPlayer pc),
         castlingRights = updateCastlingRights (castlingRights pc) move,
-        moveCount = 1 + moveCount pc,
+        previousEnPassantCell = updatePreviousEnPassantCell piece move,
         halfMoveClock = updateHalfMoveClock (halfMoveClock pc) (position pc) piece move,
-        previousEnPassantCell = updatePreviousEnPassantCell piece move
+        moveCount = succ $ moveCount pc
     }
 
 getPositionUpdates :: MoveContext -> [(Cell, Square)]
@@ -255,17 +255,17 @@ getCastlingRookPositionUpdates Nothing = []
 getEnPassantUpdates :: Maybe Cell -> [(Cell, Square)]
 getEnPassantUpdates = map (flip (,) Nothing) . maybeToList
 
-updateCastlingRights :: [Castling] -> Move -> [Castling]
+updateCastlingRights :: S.Set Castling -> Move -> S.Set Castling
 updateCastlingRights cr (Move (fromCell, _))
-    | null cr = []
-    | fromCell == e1 = removeRights White [Queenside, Kingside]
-    | fromCell == a1 = removeRights White [Queenside]
-    | fromCell == h1 = removeRights White [Kingside]
-    | fromCell == e8 = removeRights Black [Queenside, Kingside]
-    | fromCell == a8 = removeRights Black [Queenside]
-    | fromCell == h8 = removeRights Black [Kingside]
+    | S.null cr = cr
+    | fromCell == e1 = removeRights [(Kingside, White), (Queenside, White)]
+    | fromCell == h1 = removeRights [(Kingside, White)]
+    | fromCell == a1 = removeRights [(Queenside, White)]
+    | fromCell == e8 = removeRights [(Kingside, Black), (Queenside, Black)]
+    | fromCell == h8 = removeRights [(Kingside, Black)]
+    | fromCell == a8 = removeRights [(Queenside, Black)]
     | otherwise = cr where
-        removeRights color sides = cr L.\\ map (\side -> (side, color)) sides
+        removeRights c = S.difference cr (S.fromList c)
 
 updateHalfMoveClock :: Int -> Position -> Piece -> Move -> Int
 updateHalfMoveClock n pos piece move =
@@ -305,7 +305,7 @@ chessmanCanReach Knight = knightCanReach
 chessmanCanReach Rook = rookCanReach
 chessmanCanReach Queen = queenCanReach
 chessmanCanReach Pawn = error "Use pawnCanReach instead for pawns"
-chessmanCanReach King = error "Use kingCanReach instead for pawns"
+chessmanCanReach King = error "Use kingCanReach instead for kings"
 
 hasClearPath :: Position -> Piece -> Move -> Bool
 hasClearPath pos (chessman, color) (Move (fromCell, toCell))
