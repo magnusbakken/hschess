@@ -2,6 +2,7 @@ module Chesskel.Movement (
     Castling,
     CastlingData (..),
     CastlingDirection (..),
+    CheckState (..),
     Move (..),
     MoveContext (..),
     MoveError (..),
@@ -9,6 +10,8 @@ module Chesskel.Movement (
     PromotionTarget (..),
     UnderspecifiedMove (..),
     createMove,
+    createMinimallySpecifiedMove,
+    getCheckState,
     isCheckmate,
     isLegalMove,
     isLegalNonPromotionMove,
@@ -16,6 +19,7 @@ module Chesskel.Movement (
     isStalemate,
     findAllLegalMoves,
     makeMove,
+    makePromotion,
     makeNonPromotionMove,
     makeUnderspecifiedMove,
     startPosition,
@@ -26,6 +30,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Either
 import Data.Maybe
+import qualified Data.List as L
 import qualified Data.Set as S
 
 newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
@@ -45,6 +50,7 @@ data UnderspecifiedMove = CastleMove CastlingDirection | UM {
     knownPiece :: Piece,
     knownFromFile :: Maybe File,
     knownFromRank :: Maybe Rank,
+    knownIsCapture :: Bool,
     knownPromotionTarget :: Maybe PromotionTarget
 } deriving (Eq)
 
@@ -65,6 +71,8 @@ data PositionContext = PC {
     halfMoveClock :: Int,
     moveCount :: Int
 } deriving (Eq)
+
+data CheckState = Check | Checkmate deriving (Eq, Show)
 
 data MoveError =
     NoPieceAtSourceSquare |
@@ -129,8 +137,8 @@ getMoveContext :: PositionContext -> Move -> Maybe PromotionTarget -> Either Mov
 getMoveContext pc (Move (fromCell, toCell)) mpt = do
     piece <- maybeToEither NoPieceAtSourceSquare $ getSquare (position pc) fromCell
     let move = createMove fromCell toCell
-    cd <- getCastlingDataIfNecessary pc piece move
-    pt <- getPromotionOrError piece move mpt
+    mcd <- getCastlingDataIfNecessary pc piece move
+    mPromotionTarget <- getPromotionOrError piece move mpt
     let mc = MC {
         mainFromCell = fromCell,
         mainToCell = toCell,
@@ -138,10 +146,19 @@ getMoveContext pc (Move (fromCell, toCell)) mpt = do
         player = currentPlayer pc,
         isCapture = isMoveCapture (position pc) move,
         enPassantCell = getEnPassantCell pc piece move,
-        castlingData = cd,
-        promotionTarget = pt
+        castlingData = mcd,
+        promotionTarget = mPromotionTarget
     }
     maybe (Right mc) Left (getMoveError pc mc)
+
+getMoveError :: PositionContext -> MoveContext -> Maybe MoveError
+getMoveError pc mc
+    | not $ pieceCanReach pc piece move = Just PieceCannotReachSquare
+    | not $ hasClearPath (position pc) piece move = Just PieceCannotReachSquare
+    | isKingInCheck (currentPlayer pc) (position (movePiece pc mc)) = Just MoveWouldLeaveKingInCheck
+    | otherwise = Nothing where
+        move = createMove (mainFromCell mc) (mainToCell mc)
+        piece = mainPiece mc
 
 getCastlingDataIfNecessary :: PositionContext -> Piece -> Move -> Either MoveError (Maybe CastlingData)
 getCastlingDataIfNecessary pc piece move =
@@ -307,15 +324,6 @@ updateMoveCount :: Int -> Color -> Int
 updateMoveCount n White = n
 updateMoveCount n Black = succ n
 
-getMoveError :: PositionContext -> MoveContext -> Maybe MoveError
-getMoveError pc mc
-    | not $ pieceCanReach pc piece move = Just PieceCannotReachSquare
-    | not $ hasClearPath (position pc) piece move = Just PieceCannotReachSquare
-    | isKingInCheck (currentPlayer pc) (position (movePiece pc mc)) = Just MoveWouldLeaveKingInCheck
-    | otherwise = Nothing where
-        move = createMove (mainFromCell mc) (mainToCell mc)
-        piece = mainPiece mc
-
 pieceCanReach :: PositionContext -> Piece -> Move -> Bool
 pieceCanReach pc (Pawn, color) move = pawnCanReach color (position pc) move || isValidEnPassantCapture pc move
 pieceCanReach pc (King, color) move = kingCanReach color pc move
@@ -445,10 +453,20 @@ isKingInCheck :: Color -> Position -> Bool
 isKingInCheck color pos = anyPieceAttacks (otherColor color) pos (findKing color pos)
 
 isCheckmate :: PositionContext -> Bool
-isCheckmate pc = null (findAllLegalMoves pc) && isKingInCheck (currentPlayer pc) (position pc)
+isCheckmate pc = hasNoMoves pc && isKingInCheck (currentPlayer pc) (position pc)
 
 isStalemate :: PositionContext -> Bool
-isStalemate pc = null (findAllLegalMoves pc) && not (isKingInCheck (currentPlayer pc) (position pc))
+isStalemate pc = hasNoMoves pc && not (isKingInCheck (currentPlayer pc) (position pc))
+
+hasNoMoves :: PositionContext -> Bool
+hasNoMoves = null . findAllLegalMoves
+
+getCheckState :: PositionContext -> Maybe CheckState
+getCheckState pc
+    | isCheck && hasNoMoves pc = Just Checkmate
+    | isCheck = Just Check
+    | otherwise = Nothing where
+        isCheck = isKingInCheck (currentPlayer pc) (position pc)
 
 findKing :: Color -> Position -> Cell
 findKing color pos = fst . head $ filter isKing (piecesOfColor color pos) where
@@ -499,6 +517,47 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
     guard $ maybe True (== r) mFromRank
     guard $ hasPieceOfType piece (position pc) fromCell
     return fromCell
+
+createMinimallySpecifiedMove :: PositionContext -> MoveContext -> Either MoveError UnderspecifiedMove
+createMinimallySpecifiedMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }) }) = Right $ CastleMove direction
+createMinimallySpecifiedMove pc mc =
+    -- Find candidates when we only specify the destination and the piece.
+    -- If there's only a single result we don't need any disambiguation.
+    -- If we get multiple results we have to disambiguate by file and/or rank.
+    let fromCell = mainFromCell mc
+        toCell = mainToCell mc
+        piece = mainPiece mc
+        mpt = promotionTarget mc
+        isCap = isCapture mc
+        candidates = findCandidateSourceCells pc toCell piece Nothing Nothing in
+    -- In order:
+    -- An empty list indicates that the move is not valid for the position. Should only happen if the game is invalid.
+    -- A singleton list indicates that only one piece can reach the square. Disambiguation is only needed if the move is a pawn capture.
+    -- Multiple pieces can reach the square. File and/or rank disambiguation is needed.
+    case candidates of
+        [] -> Left PieceCannotReachSquare
+        [_] -> Right $ resolveSimpleDisambiguation fromCell toCell piece isCap mpt
+        multiple -> Right $ resolveDisambiguation fromCell toCell piece isCap mpt multiple
+
+-- Disambiguate by file iff the piece is a pawn and the move is a capture.
+resolveSimpleDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> UnderspecifiedMove
+resolveSimpleDisambiguation (Cell (fromFile, _)) toCell (Pawn, color) True mpt =
+    UM toCell (Pawn, color) (Just fromFile) Nothing True mpt 
+resolveSimpleDisambiguation _ toCell piece isCap mpt =
+    UM toCell piece Nothing Nothing isCap mpt 
+
+resolveDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> [Cell] -> UnderspecifiedMove
+resolveDisambiguation (Cell (actualFile, actualRank)) toCell piece isCap mpt possibleCells =
+    -- Given an actual move, figure out how much we need to disambiguate based on a given list of possible source cells.
+    let candidateCells = L.delete (Cell (actualFile, actualRank)) possibleCells
+        hasOnFile = hasOtherOnFile candidateCells
+        hasOnRank = hasOtherOnRank candidateCells
+        fileIfNecessary = if hasOnRank || (not hasOnFile && not hasOnRank) then Just actualFile else Nothing
+        rankIfNecessary = if hasOnFile then Just actualRank else Nothing in
+    UM toCell piece fileIfNecessary rankIfNecessary isCap mpt
+    where
+        hasOtherOnFile = any (\(Cell (file, _)) -> file == actualFile)
+        hasOtherOnRank = any (\(Cell (_, rank)) -> rank == actualRank)
 
 getPossiblePromotionTargets :: Piece -> Move -> [Maybe PromotionTarget]
 getPossiblePromotionTargets piece move

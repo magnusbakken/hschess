@@ -230,13 +230,12 @@ showCurrentPlayer (CurrentPlayer Black) = "b"
 showCastlingRights :: CastlingRightsToken -> String
 showCastlingRights (CastlingRights cr)
     | S.null cr = "-"
-    | otherwise = all where
+    | otherwise = catMaybes [sKingsideWhite, sQueensideWhite, sKingsideBlack, sQueensideBlack] where
         has side color = (side, color) `S.member` cr
         sKingsideWhite = if has Kingside White then Just kingsideWhite else Nothing
         sQueensideWhite = if has Queenside White then Just queensideWhite else Nothing
         sKingsideBlack = if has Kingside Black then Just kingsideBlack else Nothing
         sQueensideBlack = if has Queenside Black then Just queensideBlack else Nothing
-        all = catMaybes [sKingsideWhite, sQueensideWhite, sKingsideBlack, sQueensideBlack]
 
 showPreviousEnPassantCell :: PreviousEnPassantCellToken -> String
 showPreviousEnPassantCell (PreviousEnPassantCell Nothing) = "-"

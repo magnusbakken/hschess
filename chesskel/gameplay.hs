@@ -5,6 +5,7 @@ module Chesskel.Gameplay (
     ExtraHeader (..),
     Result (..),
     unknownHeaderData,
+    allHeaderData,
     startStandardGame,
     startGame,
     playMove,
@@ -13,11 +14,13 @@ module Chesskel.Gameplay (
     playPromotion,
     resign,
     makeDraw,
-    setResult
+    setResult,
+    createMinimallySpecifiedMoves
 ) where
 
 import Chesskel.Board
 import Chesskel.Movement
+import Control.Monad
 
 data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
 
@@ -41,7 +44,8 @@ data GameContext = GC {
     positions :: [PositionContext],
     moves :: [MoveContext],
     mainHeaderData :: HeaderData,
-    extraHeaderData :: [ExtraHeader]
+    extraHeaderData :: [ExtraHeader],
+    gameResult :: Result
 } deriving (Eq)
 
 instance Show Result where
@@ -63,6 +67,10 @@ instance Show HeaderData where
 instance Show ExtraHeader where
     show (EH { headerName = name, headerValue = value }) = "[" ++ name ++ " \"" ++ value ++ "\"]"
 
+getWin :: Color -> Result
+getWin White = WhiteWin
+getWin Black = BlackWin
+
 unknownHeaderData :: HeaderData
 unknownHeaderData = HD {
     eventHeader = "?",
@@ -74,16 +82,20 @@ unknownHeaderData = HD {
     resultHeader = Ongoing
 }
 
+allHeaderData :: GameContext -> AllHeaderData
+allHeaderData gc = (mainHeaderData gc, extraHeaderData gc)
+
 startStandardGame :: GameContext
 startStandardGame = startGame startPosition (unknownHeaderData, [])
 
 startGame :: PositionContext -> AllHeaderData -> GameContext
 startGame pc (hd, extra) = GC {
     currentPosition = pc,
-    positions = [],
+    positions = [pc],
     moves = [],
     mainHeaderData = hd,
-    extraHeaderData = extra
+    extraHeaderData = extra,
+    gameResult = Ongoing
 }
 
 playMove :: Move -> Maybe PromotionTarget -> GameContext -> Either MoveError GameContext
@@ -111,29 +123,26 @@ makeDraw = setResult Draw
 
 setResult :: Result -> GameContext -> GameContext
 setResult result gc = gc {
-    mainHeaderData = setResultHeader result (mainHeaderData gc)
+    mainHeaderData = setResultHeader result (mainHeaderData gc),
+    gameResult = result
 }
+
+createMinimallySpecifiedMoves :: GameContext -> Either MoveError [UnderspecifiedMove]
+createMinimallySpecifiedMoves gc = zipWithM createMinimallySpecifiedMove (positions gc) (moves gc)
 
 updateGameContext :: MoveContext -> PositionContext -> GameContext -> GameContext
-updateGameContext mc pc gc = gc {
-    currentPosition = pc,
-    positions = currentPosition gc:positions gc,
-    moves = mc:moves gc,
-    mainHeaderData = updateHeaderDataIfFinished pc (mainHeaderData gc)
-}
+updateGameContext mc pc gc =
+    setResult (getNewResult pc) $ gc {
+        currentPosition = pc,
+        positions = positions gc ++ [pc],
+        moves = moves gc ++ [mc]
+    }
 
-updateHeaderDataIfFinished :: PositionContext -> HeaderData -> HeaderData
-updateHeaderDataIfFinished pc hd
-    | isCheckmate pc = setWinner (otherColor (currentPlayer pc)) hd
-    | isStalemate pc = setDraw hd
-    | otherwise = hd
-
-setWinner :: Color -> HeaderData -> HeaderData
-setWinner White = setResultHeader WhiteWin
-setWinner Black = setResultHeader BlackWin
-
-setDraw :: HeaderData -> HeaderData
-setDraw = setResultHeader Draw
+getNewResult :: PositionContext -> Result
+getNewResult pc
+    | isCheckmate pc = getWin (otherColor (currentPlayer pc))
+    | isStalemate pc = Draw
+    | otherwise = Ongoing
 
 setResultHeader :: Result -> HeaderData -> HeaderData
 setResultHeader result hd = hd { resultHeader = result }

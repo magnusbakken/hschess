@@ -1,7 +1,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 module Chesskel.Formats.Pgn (
-    readPgn
+    readPgn,
+    writePgn
 ) where
 
 import Chesskel.Board
@@ -9,7 +10,6 @@ import Chesskel.Movement
 import Chesskel.Formats.Common
 import Chesskel.Gameplay
 import Control.Applicative hiding ((<|>), many)
-import Control.Monad
 import Data.Maybe
 import Text.ParserCombinators.Parsec
 
@@ -18,52 +18,6 @@ data PgnError =
     InvalidMoveError String deriving (Eq, Show)
 
 type HeaderToken = (String, String)
-
-quote = char '"'
-headerTagValue = quote *> many (noneOf "\"") <* quote
-headerTag = many1 alphaNum
-
-header = do
-    many (char ' ')
-    char '['
-    tag <- headerTag
-    many1 (char ' ')
-    value <- headerTagValue
-    char ']'
-    many (char ' ')
-    return ((tag, value) :: HeaderToken)
-
-headers = many (header <* newline)
-
-interpretHeaders :: [HeaderToken] -> Either PgnError AllHeaderData
-interpretHeaders = go unknownHeaderData [] where
-    go :: HeaderData -> [ExtraHeader] -> [HeaderToken] -> Either PgnError AllHeaderData
-    go hd extra [] = Right (hd, reverse extra)
-    go hd extra (x:xs) = do
-        let (tag, value) = x
-        (hd', isMainTag) <- updateHeaderData hd tag value
-        if isMainTag then go hd' extra xs else go hd (uncurry EH x:extra) xs
-
-updateHeaderData :: HeaderData -> String -> String -> Either PgnError (HeaderData, Bool)
-updateHeaderData hd tag value = case tag of
-    -- TODO: lenses or something?
-    "Event"  -> Right (hd { eventHeader = value }, True)
-    "Site"   -> Right (hd { siteHeader  = value }, True)
-    "Date"   -> Right (hd { dateHeader  = value }, True)
-    "Round"  -> Right (hd { roundHeader = value }, True)
-    "White"  -> Right (hd { whiteHeader = value }, True)
-    "Black"  -> Right (hd { blackHeader = value }, True)
-    "Result" -> flip (,) True <$> setResultOrFail hd value
-    _ -> Right (hd, False)
-
-parseResult resultStr = either (const Nothing) Just $ parse result "ParseResult" resultStr
-
-setResultOrFail :: HeaderData -> String -> Either PgnError HeaderData
-setResultOrFail hd value = maybe (Left $ PgnSyntaxError "Invalid result") Right $ do
-    res <- parseResult value
-    return $ hd { resultHeader = res }
-
-data CheckState = Check | Checkmate deriving (Eq, Show)
 
 data GameToken = Game MoveNumberToken | EmptyGame
 data MoveNumberToken = MoveNumber Int WhiteMoveToken | FinalMoveNumber Int GameResultToken
@@ -139,6 +93,50 @@ instance Show PgnMove where
         sCheck Check = showString "+"
         sCheck Checkmate = showString "#"
         showEmpty = showString ""
+
+quote = char '"'
+headerTagValue = quote *> many (noneOf "\"") <* quote
+headerTag = many1 alphaNum
+
+header = do
+    many (char ' ')
+    char '['
+    tag <- headerTag
+    many1 (char ' ')
+    value <- headerTagValue
+    char ']'
+    many (char ' ')
+    return ((tag, value) :: HeaderToken)
+
+headers = many (header <* newline)
+
+interpretHeaders :: [HeaderToken] -> Either PgnError AllHeaderData
+interpretHeaders = go unknownHeaderData [] where
+    go :: HeaderData -> [ExtraHeader] -> [HeaderToken] -> Either PgnError AllHeaderData
+    go hd extra [] = Right (hd, reverse extra)
+    go hd extra (x:xs) = do
+        let (tag, value) = x
+        (hd', isMainTag) <- updateHeaderData hd tag value
+        if isMainTag then go hd' extra xs else go hd (uncurry EH x:extra) xs
+
+updateHeaderData :: HeaderData -> String -> String -> Either PgnError (HeaderData, Bool)
+updateHeaderData hd tag value = case tag of
+    -- TODO: lenses or something?
+    "Event"  -> Right (hd { eventHeader = value }, True)
+    "Site"   -> Right (hd { siteHeader  = value }, True)
+    "Date"   -> Right (hd { dateHeader  = value }, True)
+    "Round"  -> Right (hd { roundHeader = value }, True)
+    "White"  -> Right (hd { whiteHeader = value }, True)
+    "Black"  -> Right (hd { blackHeader = value }, True)
+    "Result" -> flip (,) True <$> setResultOrFail hd value
+    _ -> Right (hd, False)
+
+parseResult resultStr = either (const Nothing) Just $ parse result "ParseResult" resultStr
+
+setResultOrFail :: HeaderData -> String -> Either PgnError HeaderData
+setResultOrFail hd value = maybe (Left $ PgnSyntaxError "Invalid result") Right $ do
+    res <- parseResult value
+    return $ hd { resultHeader = res }
 
 king = King <$ char 'K'
 queen = Queen <$ char 'Q'
@@ -302,12 +300,13 @@ mapGameplayError moveN color pgnMove (Left e) =
     Left $ InvalidMoveError $ "Invalid move: " ++ moveStr ++ " (" ++ show e ++ ")"
 
 createUnderspecifiedMove :: PositionContext -> PgnMove -> UnderspecifiedMove
-createUnderspecifiedMove pc (PgnCastleMove direction) = CastleMove direction
+createUnderspecifiedMove _ (PgnCastleMove direction) = CastleMove direction
 createUnderspecifiedMove pc pgnMove = UM {
     knownToCell = pgnToCell pgnMove,
     knownPiece = (pgnChessman pgnMove, currentPlayer pc),
     knownFromFile = pgnFromFile pgnMove,
     knownFromRank = pgnFromRank pgnMove,
+    knownIsCapture = pgnIsCapture pgnMove,
     knownPromotionTarget = pgnPromotionTarget pgnMove
 }
 
@@ -339,8 +338,67 @@ interpretGame :: GameToken -> AllHeaderData -> Either PgnError GameContext
 interpretGame EmptyGame hd = return (startGame startPosition hd)
 interpretGame (Game moveNumberToken) hd = interpretMoveNumber moveNumberToken (startGame startPosition hd)
 
+createBlackMoveToken :: Int -> Result -> PgnMove -> [PgnMove] -> BlackMoveToken
+createBlackMoveToken _ res x [] = FinalBlackMove x (GameResult res)
+createBlackMoveToken moveN res x xs = BlackMove x (createMoveNumberToken (moveN+1) res xs)
+
+createWhiteMoveToken :: Int -> Result -> PgnMove -> [PgnMove] -> WhiteMoveToken
+createWhiteMoveToken _ res x [] = FinalWhiteMove x (GameResult res)
+createWhiteMoveToken moveN res x (y:ys) = WhiteMove x (createBlackMoveToken moveN res y ys)
+
+createMoveNumberToken :: Int -> Result -> [PgnMove] -> MoveNumberToken
+createMoveNumberToken moveN res [] = FinalMoveNumber moveN (GameResult res)
+createMoveNumberToken moveN res (x:xs) = MoveNumber moveN (createWhiteMoveToken moveN res x xs)
+
+createGameToken :: Result -> [PgnMove] -> GameToken
+createGameToken _ [] = EmptyGame
+createGameToken res xs = Game (createMoveNumberToken 1 res xs)
+
+createPgnMove :: PositionContext -> UnderspecifiedMove -> PgnMove
+createPgnMove _ (CastleMove direction) = PgnCastleMove direction
+createPgnMove nextPosition unspecMove = 
+    let (cm, _) = knownPiece unspecMove in
+    PgnMove {
+        pgnChessman = cm,
+        pgnToCell = knownToCell unspecMove,
+        pgnIsCapture = knownIsCapture unspecMove,
+        pgnFromFile = knownFromFile unspecMove,
+        pgnFromRank = knownFromRank unspecMove,
+        pgnPromotionTarget = knownPromotionTarget unspecMove,
+        pgnCheckState = getCheckState nextPosition
+    }
+
+createPgnMoves :: GameContext -> Either MoveError [PgnMove]
+createPgnMoves gc
+    | null (positions gc) = return []
+    | otherwise = do
+        unspecMoves <- createMinimallySpecifiedMoves gc
+        -- We skip the first move because createPgnMove needs each move paired with the _next_ position,
+        -- and the first position in the position list always precedes the first move in the move list.
+        return $ zipWith createPgnMove (tail (positions gc)) unspecMoves
+
+-- TODO: should divide into lines of less than 80 characters.
+writeGameToken :: GameToken -> ShowS
+writeGameToken = shows
+
+writeExtraHeaders :: [ExtraHeader] -> ShowS
+writeExtraHeaders [] = showString ""
+writeExtraHeaders (x:xs) = shows x . showString "\n" . writeExtraHeaders xs
+
+writeAllHeaderData :: AllHeaderData -> ShowS
+writeAllHeaderData (hd, extra) = shows hd . writeExtraHeaders extra
+
+writeGame :: AllHeaderData -> GameToken -> String
+writeGame hdata gameToken = writeAllHeaderData hdata . showString "\n\n" . writeGameToken gameToken $ ""
+
+createGame :: GameContext -> Either MoveError GameToken
+createGame gc = createGameToken (gameResult gc) <$> createPgnMoves gc
+
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do
     (headerTokens, gameToken) <- mapSyntaxError (parse pgn "ReadPgn" pgnString)
-    allHeaderData <- interpretHeaders headerTokens
-    interpretGame gameToken allHeaderData
+    hdata <- interpretHeaders headerTokens
+    interpretGame gameToken hdata
+
+writePgn :: GameContext -> Either MoveError String
+writePgn gc = writeGame (allHeaderData gc) <$> createGame gc
