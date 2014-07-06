@@ -88,12 +88,12 @@ startGame pc (hd, extra) = GC {
 
 playMove :: Move -> Maybe PromotionTarget -> GameContext -> Either MoveError GameContext
 playMove move mpt gc = do
-    (mc, pc') <- makeMove' (currentPosition gc) move mpt
+    (mc, pc') <- makeMove (currentPosition gc) move mpt
     return $ updateGameContext mc pc' gc
 
 playUnderspecifiedMove :: UnderspecifiedMove -> GameContext -> Either MoveError GameContext
 playUnderspecifiedMove unspecMove gc = do
-    (mc, pc') <- makeUnderspecifiedMove' (currentPosition gc) unspecMove
+    (mc, pc') <- makeUnderspecifiedMove (currentPosition gc) unspecMove
     return $ updateGameContext mc pc' gc
 
 playNonPromotionMove :: Move -> GameContext -> Either MoveError GameContext

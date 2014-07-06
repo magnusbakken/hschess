@@ -16,11 +16,8 @@ module Chesskel.Movement (
     isStalemate,
     findAllLegalMoves,
     makeMove,
-    makeMove',
     makeNonPromotionMove,
-    makeNonPromotionMove',
     makeUnderspecifiedMove,
-    makeUnderspecifiedMove',
     startPosition,
 ) where
 
@@ -469,55 +466,6 @@ isMovePromotion (Pawn, White) (Move (_, Cell (_, Rank8))) = True
 isMovePromotion (Pawn, Black) (Move (_, Cell (_, Rank1))) = True
 isMovePromotion _ _ = False
 
-getPossiblePromotionTargets :: Piece -> Move -> [Maybe PromotionTarget]
-getPossiblePromotionTargets piece move
-    | isMovePromotion piece move = map Just allPromotionTargets
-    | otherwise = [Nothing]
-
-findLegalMoves :: PositionContext -> (Cell, Piece) -> [MoveContext]
-findLegalMoves pc (fromCell, piece) = do
-    toCell <- allCells
-    pt <- getPossiblePromotionTargets piece (createMove fromCell toCell)
-    rights [getMoveContext pc (createMove fromCell toCell) pt]
-
-findAllLegalMoves :: PositionContext -> [MoveContext]
-findAllLegalMoves pc = concatMap (findLegalMoves pc) (piecesOfColor (currentPlayer pc) (position pc))
-
-isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
-isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt
-
-isLegalNonPromotionMove :: PositionContext -> Move -> Bool
-isLegalNonPromotionMove pc move = isLegalMove pc move Nothing
-
-isLegalPromotion :: PositionContext -> Move -> PromotionTarget -> Bool
-isLegalPromotion pc move pt = isLegalMove pc move (Just pt)
-
-makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError PositionContext
-makeMove pc move mpt = movePiece pc <$> getMoveContext pc move mpt
-
-makeMove' :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError (MoveContext, PositionContext)
-makeMove' pc move mpt = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt
-
-makeUnderspecifiedMove :: PositionContext -> UnderspecifiedMove -> Either MoveError PositionContext
-makeUnderspecifiedMove = underspecifiedMove makeMove
-
-makeUnderspecifiedMove' :: PositionContext -> UnderspecifiedMove -> Either MoveError (MoveContext, PositionContext)
-makeUnderspecifiedMove' = underspecifiedMove makeMove'
-
-underspecifiedMove :: (PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError a) ->
-                       PositionContext -> UnderspecifiedMove -> Either MoveError a
-underspecifiedMove moveFunc pc (CastleMove direction) =
-    moveFunc pc (kingCastlingMove (direction, currentPlayer pc)) Nothing
-underspecifiedMove moveFunc pc unspecMove = do
-    fromCell <- getSourceCell pc unspecMove
-    moveFunc pc (createMove fromCell (knownToCell unspecMove)) (knownPromotionTarget unspecMove)
-
-makeNonPromotionMove :: PositionContext -> Move -> Either MoveError PositionContext
-makeNonPromotionMove pc move = makeMove pc move Nothing
-
-makePromotion :: PositionContext -> Move -> PromotionTarget -> Either MoveError PositionContext
-makePromotion pc move pt = makeMove pc move (Just pt)
-
 -- Disambiguation for underspecified moves.
 getSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
 getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
@@ -547,6 +495,45 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
     guard $ maybe True (== r) mFromRank
     guard $ hasPieceOfType piece (position pc) fromCell
     return fromCell
+
+getPossiblePromotionTargets :: Piece -> Move -> [Maybe PromotionTarget]
+getPossiblePromotionTargets piece move
+    | isMovePromotion piece move = map Just allPromotionTargets
+    | otherwise = [Nothing]
+
+findLegalMoves :: PositionContext -> (Cell, Piece) -> [MoveContext]
+findLegalMoves pc (fromCell, piece) = do
+    toCell <- allCells
+    pt <- getPossiblePromotionTargets piece (createMove fromCell toCell)
+    rights [getMoveContext pc (createMove fromCell toCell) pt]
+
+findAllLegalMoves :: PositionContext -> [MoveContext]
+findAllLegalMoves pc = concatMap (findLegalMoves pc) (piecesOfColor (currentPlayer pc) (position pc))
+
+isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
+isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt
+
+isLegalNonPromotionMove :: PositionContext -> Move -> Bool
+isLegalNonPromotionMove pc move = isLegalMove pc move Nothing
+
+isLegalPromotion :: PositionContext -> Move -> PromotionTarget -> Bool
+isLegalPromotion pc move pt = isLegalMove pc move (Just pt)
+
+makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError (MoveContext, PositionContext)
+makeMove pc move mpt = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt
+
+makeUnderspecifiedMove :: PositionContext -> UnderspecifiedMove -> Either MoveError (MoveContext, PositionContext)
+makeUnderspecifiedMove pc (CastleMove direction) =
+    makeMove pc (kingCastlingMove (direction, currentPlayer pc)) Nothing
+makeUnderspecifiedMove pc unspecMove = do
+    fromCell <- getSourceCell pc unspecMove
+    makeMove pc (createMove fromCell (knownToCell unspecMove)) (knownPromotionTarget unspecMove)
+
+makeNonPromotionMove :: PositionContext -> Move -> Either MoveError (MoveContext, PositionContext)
+makeNonPromotionMove pc move = makeMove pc move Nothing
+
+makePromotion :: PositionContext -> Move -> PromotionTarget -> Either MoveError (MoveContext, PositionContext)
+makePromotion pc move pt = makeMove pc move (Just pt)
 
 -- Generic utils functions
 maybeToEither :: e -> Maybe a -> Either e a

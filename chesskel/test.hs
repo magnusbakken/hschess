@@ -85,7 +85,7 @@ testMove moveStr pc = fromJust $ do
     (move, mpt) <- readLongNotationMove moveStr
     case makeMove pc move mpt of
         Left e -> error $ moveStr ++ ": " ++ show e
-        Right mc -> return mc
+        Right (_, pc) -> return pc
 
 testHasLegalMove :: String -> PositionContext -> Bool
 testHasLegalMove moveStr pc = maybe False (uncurry $ isLegalMove pc) (readLongNotationMove moveStr)
