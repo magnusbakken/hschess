@@ -1,7 +1,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 module Chesskel.Formats.Fen (
-    readFen
+    readFen,
+    writeFen
 ) where
 
 import Chesskel.Board
@@ -10,6 +11,7 @@ import Chesskel.Formats.Common
 import Control.Applicative hiding ((<|>), many)
 import Data.Char
 import Data.Maybe
+import qualified Data.List as L
 import qualified Data.Set as S
 import Data.Traversable
 import Text.Parsec
@@ -94,15 +96,20 @@ white = CurrentPlayer White <$ char 'w'
 black = CurrentPlayer Black <$ char 'b'
 pCurrentPlayer = white <|> black
 
+kingsideWhite = 'K'
+queensideWhite = 'Q'
+kingsideBlack = 'k'
+queensideBlack = 'q'
+
 noCastlingRights = CastlingRights S.empty <$ char '-'
 hasCastlingRights c direction color = do
     m <- optionMaybe (() <$ char c)
     return (if isJust m then Just (direction, color) else Nothing)
 withCastlingRights = do
-    mWhiteKingside <- hasCastlingRights 'K' Kingside White
-    mWhiteQueenside <- hasCastlingRights 'Q' Queenside White
-    mBlackKingside <- hasCastlingRights 'k' Kingside Black
-    mBlackQueenside <- hasCastlingRights 'q' Queenside Black
+    mWhiteKingside <- hasCastlingRights kingsideWhite Kingside White
+    mWhiteQueenside <- hasCastlingRights queensideWhite Queenside White
+    mBlackKingside <- hasCastlingRights kingsideBlack Kingside Black
+    mBlackQueenside <- hasCastlingRights queensideBlack Queenside Black
     let castling = catMaybes [mWhiteKingside, mWhiteQueenside, mBlackKingside, mBlackQueenside]
     if null castling
         then parserFail "At least one castling rights token must be present, or '-' should be used."
@@ -184,3 +191,71 @@ mapSyntaxError (Right a) = Right a
 
 readFen :: String -> Either FenError PositionContext
 readFen s = mapSyntaxError (parse fen "ParseFen" s) >>= interpretFen
+
+collapseRow :: [Square] -> RowToken
+collapseRow = ungroup . L.group where
+    ungroup [] = []
+    ungroup ((Nothing:xs) : xss) = (EmptySpaceCount $ length xs + 1) : ungroup xss
+    ungroup (xs : xss) = map FenPiece (catMaybes xs) ++ ungroup xss
+
+createPiecePlacement :: Position -> PiecePlacementToken
+createPiecePlacement pos =
+    let [r1, r2, r3, r4, r5, r6, r7, r8] = map collapseRow (getRows pos) in
+    PiecePlacement r8 r7 r6 r5 r4 r3 r2 r1
+
+createSyntaxTree :: PositionContext -> FenToken
+createSyntaxTree pc = Fen {
+    piecePlacementToken = createPiecePlacement (position pc),
+    currentPlayerToken = CurrentPlayer (currentPlayer pc),
+    castlingRightsToken = CastlingRights (castlingRights pc),
+    previousEnPassantCellToken = PreviousEnPassantCell (previousEnPassantCell pc),
+    halfMoveClockToken = HalfMoveClock (halfMoveClock pc),
+    fullMoveNumberToken = FullMoveNumber (moveCount pc)
+}
+
+showRow :: RowToken -> String
+showRow = map squareToChar where
+    squareToChar (EmptySpaceCount n) = intToDigit n
+    squareToChar (FenPiece piece) = pieceToChar piece
+
+showPiecePlacement :: PiecePlacementToken -> String
+showPiecePlacement ppt =
+    let rows = [row8 ppt, row7 ppt, row6 ppt, row5 ppt, row4 ppt, row3 ppt, row2 ppt, row1 ppt] in
+    L.intercalate "/" (map showRow rows)
+
+showCurrentPlayer :: CurrentPlayerToken -> String
+showCurrentPlayer (CurrentPlayer White) = "w"
+showCurrentPlayer (CurrentPlayer Black) = "b"
+
+showCastlingRights :: CastlingRightsToken -> String
+showCastlingRights (CastlingRights cr)
+    | S.null cr = "-"
+    | otherwise = all where
+        has side color = (side, color) `S.member` cr
+        sKingsideWhite = if has Kingside White then Just kingsideWhite else Nothing
+        sQueensideWhite = if has Queenside White then Just queensideWhite else Nothing
+        sKingsideBlack = if has Kingside Black then Just kingsideBlack else Nothing
+        sQueensideBlack = if has Queenside Black then Just queensideBlack else Nothing
+        all = catMaybes [sKingsideWhite, sQueensideWhite, sKingsideBlack, sQueensideBlack]
+
+showPreviousEnPassantCell :: PreviousEnPassantCellToken -> String
+showPreviousEnPassantCell (PreviousEnPassantCell Nothing) = "-"
+showPreviousEnPassantCell (PreviousEnPassantCell (Just c)) = show c
+
+showHalfMoveClock :: HalfMoveClockToken -> String
+showHalfMoveClock (HalfMoveClock n) = show n
+
+showFullMoveNumber :: FullMoveNumberToken -> String
+showFullMoveNumber (FullMoveNumber n) = show n
+
+showSyntaxTree :: FenToken -> String
+showSyntaxTree fenToken = unwords [
+    showPiecePlacement (piecePlacementToken fenToken),
+    showCurrentPlayer (currentPlayerToken fenToken),
+    showCastlingRights (castlingRightsToken fenToken),
+    showPreviousEnPassantCell (previousEnPassantCellToken fenToken),
+    showHalfMoveClock (halfMoveClockToken fenToken),
+    showFullMoveNumber (fullMoveNumberToken fenToken)]
+
+writeFen :: PositionContext -> String
+writeFen = showSyntaxTree . createSyntaxTree

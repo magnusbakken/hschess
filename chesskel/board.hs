@@ -7,9 +7,11 @@ module Chesskel.Board (
     File (..),
     Cell (..),
     Position,
+    pieceToChar,
     otherColor,
     createCell,
     piecesOfColor,
+    getRows,
     allCells,
     getSquare,
     hasPiece,
@@ -194,20 +196,20 @@ shortRank Rank6 = '6'
 shortRank Rank7 = '7'
 shortRank Rank8 = '8'
 
-showPiece :: Piece -> String
-showPiece (Pawn, color) = colorize "P" color
-showPiece (Knight, color) = colorize "N" color
-showPiece (Bishop, color) = colorize "B" color
-showPiece (Rook, color) = colorize "R" color
-showPiece (Queen, color) = colorize "Q" color
-showPiece (King, color) = colorize "K" color
+pieceToChar :: Piece -> Char
+pieceToChar (Pawn, color) = colorize 'P' color
+pieceToChar (Knight, color) = colorize 'N' color
+pieceToChar (Bishop, color) = colorize 'B' color
+pieceToChar (Rook, color) = colorize 'R' color
+pieceToChar (Queen, color) = colorize 'Q' color
+pieceToChar (King, color) = colorize 'K' color
 
-colorize :: String -> Color -> String
-colorize s color = if color == Black then map toLower s else s
+colorize :: Char -> Color -> Char
+colorize c color = if color == Black then toLower c else c
 
 showSquare :: Square -> String
 showSquare Nothing = " "
-showSquare (Just piece) = showPiece piece
+showSquare (Just piece) = [pieceToChar piece]
 
 showRow :: [Square] -> String
 showRow = unwords . map showSquare

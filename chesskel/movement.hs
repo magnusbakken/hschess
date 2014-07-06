@@ -256,7 +256,7 @@ movePiece pc mc =
         castlingRights = updateCastlingRights (castlingRights pc) move,
         previousEnPassantCell = updatePreviousEnPassantCell piece move,
         halfMoveClock = updateHalfMoveClock (halfMoveClock pc) (position pc) piece move,
-        moveCount = succ $ moveCount pc
+        moveCount = updateMoveCount (moveCount pc) (currentPlayer pc)
     }
 
 getPositionUpdates :: MoveContext -> [(Cell, Square)]
@@ -290,18 +290,22 @@ updateCastlingRights cr (Move (fromCell, _))
     | otherwise = cr where
         removeRights c = S.difference cr (S.fromList c)
 
-updateHalfMoveClock :: Int -> Position -> Piece -> Move -> Int
-updateHalfMoveClock n pos piece move =
-    if needsReset piece move then 0 else succ n where
-        needsReset (Pawn, _) _ = True
-        needsReset _ m = isMoveCapture pos m
-
 updatePreviousEnPassantCell :: Piece -> Move -> Maybe Cell
 updatePreviousEnPassantCell (Pawn, White) (Move (Cell (file, Rank2), Cell (_, Rank4))) =
     Just (createCell file Rank3)
 updatePreviousEnPassantCell (Pawn, Black) (Move (Cell (file, Rank7), Cell (_, Rank5))) =
     Just (createCell file Rank6)
 updatePreviousEnPassantCell _ _ = Nothing
+
+updateHalfMoveClock :: Int -> Position -> Piece -> Move -> Int
+updateHalfMoveClock n pos piece move =
+    if needsReset piece move then 0 else succ n where
+        needsReset (Pawn, _) _ = True
+        needsReset _ m = isMoveCapture pos m
+
+updateMoveCount :: Int -> Color -> Int
+updateMoveCount n White = n
+updateMoveCount n Black = succ n
 
 getMoveError :: PositionContext -> MoveContext -> Maybe MoveError
 getMoveError pc mc
