@@ -71,7 +71,7 @@ data WhiteMoveToken = WhiteMove PgnMove BlackMoveToken | FinalWhiteMove PgnMove 
 data BlackMoveToken = BlackMove PgnMove MoveNumberToken | FinalBlackMove PgnMove GameResultToken
 data GameResultToken = GameResult Result
 
-data PgnMove = CastleMove CastlingDirection | PgnMove {
+data PgnMove = PgnCastleMove CastlingDirection | PgnMove {
     pgnChessman :: Chessman,
     pgnToCell :: Cell,
     pgnIsCapture :: Bool,
@@ -101,7 +101,7 @@ instance Show GameResultToken where
     showsPrec _ (GameResult res) = shows res
 
 instance Show PgnMove where
-    showsPrec _ (CastleMove direction) = shows direction
+    showsPrec _ (PgnCastleMove direction) = shows direction
     showsPrec _ mv = showChessman . showFromFile . showFromRank . showCapture . showToCell . showPromotion . showCheck where
         showChessman = sChessman (pgnChessman mv)
         showFromFile = maybe showEmpty sFile (pgnFromFile mv)
@@ -247,8 +247,8 @@ nonPawnMove = do
         pgnCheckState = mCheckState
     }
 
-castleShort = CastleMove Kingside <$ (string "O-O" <|> string "0-0")
-castleLong = CastleMove Queenside <$ (string "O-O-O" <|> string "0-0-0")
+castleShort = PgnCastleMove Kingside <$ (string "O-O" <|> string "0-0")
+castleLong = PgnCastleMove Queenside <$ (string "O-O-O" <|> string "0-0-0")
 castling = try castleLong <|> castleShort
 
 ply = castling <|> pawnMove <|> nonPawnMove
@@ -294,90 +294,50 @@ mapSyntaxError :: Either ParseError a -> Either PgnError a
 mapSyntaxError (Right a) = Right a
 mapSyntaxError (Left e) = Left $ PgnSyntaxError $ "Invalid syntax: " ++ show e
 
-mapGameplayError :: Either MoveError a -> Either PgnError a
-mapGameplayError (Right a) = Right a
-mapGameplayError (Left e) = Left $ InvalidMoveError $ "Invalid move: " ++ show e
+mapGameplayError :: Int -> Color -> PgnMove -> Either MoveError a -> Either PgnError a
+mapGameplayError _ _ _ (Right a) = Right a
+mapGameplayError moveN color pgnMove (Left e) =
+    let dots = if color == White then "." else "..."
+        moveStr = show moveN ++ dots ++ " " ++ show pgnMove in
+    Left $ InvalidMoveError $ "Invalid move: " ++ moveStr ++ " (" ++ show e ++ ")"
 
-getSourceCell :: PositionContext -> PgnMove -> Either PgnError Cell
-getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
-getSourceCell (PC { currentPlayer = Black }) (CastleMove _) = return e8
-getSourceCell pc pgnMove =
-    case createCell <$> pgnFromFile pgnMove <*> pgnFromRank pgnMove of
-        Just c -> return c
-        Nothing -> disambiguateSourceCell pc pgnMove
+createUnderspecifiedMove :: PositionContext -> PgnMove -> UnderspecifiedMove
+createUnderspecifiedMove pc (PgnCastleMove direction) = CastleMove direction
+createUnderspecifiedMove pc pgnMove = UM {
+    knownToCell = pgnToCell pgnMove,
+    knownPiece = (pgnChessman pgnMove, currentPlayer pc),
+    knownFromFile = pgnFromFile pgnMove,
+    knownFromRank = pgnFromRank pgnMove,
+    knownPromotionTarget = pgnPromotionTarget pgnMove
+}
 
-disambiguateSourceCell :: PositionContext -> PgnMove -> Either PgnError Cell
-disambiguateSourceCell pc pgnMove =
-    let toCell = pgnToCell pgnMove
-        piece = (pgnChessman pgnMove, currentPlayer pc)
-        mFromFile = pgnFromFile pgnMove
-        mFromRank = pgnFromRank pgnMove
-        allCandidates = findCandidateSourceCells pc toCell piece mFromFile mFromRank in
-    case allCandidates of
-        [single] -> Right single
-        [] -> Left $ PgnSyntaxError $ "No piece found for move " ++ show pgnMove
-        multiple -> Left $ PgnSyntaxError $
-            "Multiple pieces found for move " ++
-            show pgnMove ++
-            ". The following source cells are possible: " ++
-            show multiple ++
-            "."
+interpretMove :: Int -> Color -> PgnMove -> GameContext -> Either PgnError GameContext
+interpretMove moveN color pgnMove gc = 
+    mapGameplayError moveN color pgnMove $ playUnderspecifiedMove (createUnderspecifiedMove (currentPosition gc) pgnMove) gc
 
-findCandidateSourceCells :: PositionContext -> Cell -> Piece -> Maybe File -> Maybe Rank -> [Cell]
-findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
-    MC { mainFromCell = fromCell, mainToCell = toCell' } <- findAllLegalMoves pc
-    guard $ toCell == toCell'
-    let Cell (f, r) = fromCell
-    guard $ maybe True (== f) mFromFile
-    guard $ maybe True (== r) mFromRank
-    guard $ hasPieceOfType piece (position pc) fromCell
-    return fromCell
+interpretGameResult :: GameResultToken -> GameContext -> GameContext
+interpretGameResult (GameResult res) = setResult res
 
-getDestinationCell :: PositionContext -> PgnMove -> Cell
-getDestinationCell (PC { currentPlayer = White }) (CastleMove Queenside) = c1
-getDestinationCell (PC { currentPlayer = White }) (CastleMove Kingside) = g1
-getDestinationCell (PC { currentPlayer = Black }) (CastleMove Queenside) = c8
-getDestinationCell (PC { currentPlayer = Black }) (CastleMove Kingside) = g8
-getDestinationCell _ pgnMove = pgnToCell pgnMove
+-- We don't do any validation of the move numbers yet.
+interpretMoveNumber :: MoveNumberToken -> GameContext -> Either PgnError GameContext
+interpretMoveNumber (FinalMoveNumber _ resultToken) gc = return $ interpretGameResult resultToken gc
+interpretMoveNumber (MoveNumber moveN whiteMoveToken) gc = interpretWhiteMove moveN whiteMoveToken gc
 
-translateMove :: PositionContext -> PgnMove -> Either PgnError (Move, Maybe PromotionTarget)
-translateMove pc pgnMove = do
-    sourceCell <- getSourceCell pc pgnMove
-    let destinationCell = getDestinationCell pc pgnMove
-    return (createMove sourceCell destinationCell, safeGetPromotionTarget pgnMove) where
-        -- TODO: This is necessary because of the way the PgnMove type is currently defined.
-        -- It should perhaps be split into two types -- one for castling moves and one for regular moves.
-        safeGetPromotionTarget (CastleMove _) = Nothing
-        safeGetPromotionTarget mv = pgnPromotionTarget mv
+interpretWhiteMove :: Int -> WhiteMoveToken -> GameContext -> Either PgnError GameContext
+interpretWhiteMove moveN (FinalWhiteMove mv resultToken) gc = interpretFinalMove moveN White resultToken mv gc
+interpretWhiteMove moveN (WhiteMove mv blackMoveToken) gc = interpretMove moveN White mv gc >>= interpretBlackMove moveN blackMoveToken
 
-interpretMove :: PgnMove -> GameContext -> Either PgnError GameContext
-interpretMove pgnMove gc = do
-    (move, mPromotionTarget) <- translateMove (currentPosition gc) pgnMove
-    mapGameplayError (playMove move mPromotionTarget gc)
+interpretBlackMove :: Int -> BlackMoveToken -> GameContext -> Either PgnError GameContext
+interpretBlackMove moveN (FinalBlackMove mv resultToken) gc = interpretFinalMove moveN Black resultToken mv gc
+interpretBlackMove moveN (BlackMove mv moveNumberToken) gc = interpretMove moveN Black mv gc >>= interpretMoveNumber moveNumberToken
+
+interpretFinalMove :: Int -> Color -> GameResultToken -> PgnMove -> GameContext -> Either PgnError GameContext
+interpretFinalMove moveN color resultToken mv gc = interpretGameResult resultToken <$> interpretMove moveN color mv gc
 
 -- We currently don't support partial games, i.e. games where the first move in the text isn't move 1.
 interpretGame :: GameToken -> AllHeaderData -> Either PgnError GameContext
 interpretGame EmptyGame hd = return (startGame startPosition hd)
 interpretGame (Game moveNumberToken) hd = interpretMoveNumber moveNumberToken (startGame startPosition hd)
-
-interpretGameResult :: GameResultToken -> GameContext -> GameContext
-interpretGameResult (GameResult res) = setResult res
-
--- We also don't do any validation of the move numbers yet.
-interpretMoveNumber :: MoveNumberToken -> GameContext -> Either PgnError GameContext
-interpretMoveNumber (FinalMoveNumber _ resultToken) gc = return $ interpretGameResult resultToken gc
-interpretMoveNumber (MoveNumber _ whiteMoveToken) gc = interpretWhiteMove whiteMoveToken gc
-
-interpretWhiteMove :: WhiteMoveToken -> GameContext -> Either PgnError GameContext
-interpretWhiteMove (FinalWhiteMove mv resultToken) gc = interpretFinalMove resultToken mv gc
-interpretWhiteMove (WhiteMove mv blackMoveToken) gc = interpretMove mv gc >>= interpretBlackMove blackMoveToken
-
-interpretBlackMove :: BlackMoveToken -> GameContext -> Either PgnError GameContext
-interpretBlackMove (FinalBlackMove mv resultToken) gc = interpretFinalMove resultToken mv gc
-interpretBlackMove (BlackMove mv moveNumberToken) gc = interpretMove mv gc >>= interpretMoveNumber moveNumberToken
-
-interpretFinalMove :: GameResultToken -> PgnMove -> GameContext -> Either PgnError GameContext
-interpretFinalMove resultToken mv gc = interpretGameResult resultToken <$> interpretMove mv gc
 
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do

@@ -1,26 +1,27 @@
 module Chesskel.Movement (
-    Move (..),
-    MoveContext (..),
-    PositionContext (..),
-    MoveError (..),
-    PromotionTarget (..),
-    CastlingDirection (..),
     Castling,
     CastlingData (..),
+    CastlingDirection (..),
+    Move (..),
+    MoveContext (..),
+    MoveError (..),
+    PositionContext (..),
+    PromotionTarget (..),
+    UnderspecifiedMove (..),
     createMove,
-    allPromotionTargets,
-    getPieceForPromotionTarget,
     isCheckmate,
-    isStalemate,
-    startPosition,
-    makeMove,
-    makeNonPromotionMove,
-    makePromotion,
-    makeMove',
     isLegalMove,
     isLegalNonPromotionMove,
     isLegalPromotion,
+    isStalemate,
     findAllLegalMoves,
+    makeMove,
+    makeMove',
+    makeNonPromotionMove,
+    makeNonPromotionMove',
+    makeUnderspecifiedMove,
+    makeUnderspecifiedMove',
+    startPosition,
 ) where
 
 import Chesskel.Board
@@ -40,6 +41,14 @@ data MoveContext = MC {
     enPassantCell :: Maybe Cell,
     castlingData :: Maybe CastlingData,
     promotionTarget :: Maybe PromotionTarget
+} deriving (Eq)
+
+data UnderspecifiedMove = CastleMove CastlingDirection | UM {
+    knownToCell :: Cell,
+    knownPiece :: Piece,
+    knownFromFile :: Maybe File,
+    knownFromRank :: Maybe Rank,
+    knownPromotionTarget :: Maybe PromotionTarget
 } deriving (Eq)
 
 data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
@@ -66,8 +75,9 @@ data MoveError =
     MoveWouldLeaveKingInCheck |
     PromotionIsNeeded |
     PromotionIsNotNeeded |
-    DoesNotHaveCastlingRights |
-    CastlingIsNotPossible deriving (Eq, Show)
+    DoesNotHaveCastlingRights Castling |
+    CastlingIsNotPossible Castling |
+    InsufficientDisambiguation [Cell] deriving (Eq, Show)
 
 instance Enum Move where
     fromEnum (Move (fromCell, toCell)) = (fromEnum fromCell * 64) + fromEnum toCell
@@ -118,18 +128,6 @@ getPieceForPromotionTarget color PBishop = (Bishop, color)
 getPieceForPromotionTarget color PRook = (Rook, color)
 getPieceForPromotionTarget color PQueen = (Queen, color)
 
-makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError PositionContext
-makeMove pc move mpt = fmap (movePiece pc) (getMoveContext pc move mpt)
-
-makeNonPromotionMove :: PositionContext -> Move -> Either MoveError PositionContext
-makeNonPromotionMove pc move = makeMove pc move Nothing
-
-makePromotion :: PositionContext -> Move -> PromotionTarget -> Either MoveError PositionContext
-makePromotion pc move pt = makeMove pc move (Just pt)
-
-makeMove' :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError (MoveContext, PositionContext)
-makeMove' pc move mpt = getMoveContext pc move mpt >>= \mc -> return (mc, movePiece pc mc)
-
 getMoveContext :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError MoveContext
 getMoveContext pc (Move (fromCell, toCell)) mpt = do
     piece <- maybeToEither NoPieceAtSourceSquare $ getSquare (position pc) fromCell
@@ -154,22 +152,22 @@ getCastlingDataIfNecessary pc piece move =
 
 getCastlingDataOrError :: PositionContext -> Castling -> Either MoveError CastlingData
 getCastlingDataOrError pc castling
-    | castling `S.member` castlingRights pc = Left DoesNotHaveCastlingRights
-    | otherwise = maybeToEither CastlingIsNotPossible $ do
-        let (Move (fromCell, toCell)) = getRookCastlingMove castling
+    | castling `S.notMember` castlingRights pc = Left (DoesNotHaveCastlingRights castling)
+    | otherwise = maybeToEither (CastlingIsNotPossible castling) $ do
+        let (Move (fromCell, toCell)) = rookCastlingMove castling
         guard $ validateKingForCastling pc castling
         guard $ validateRookForCastling pc (createMove fromCell toCell)
         return $ CD fromCell toCell castling
 
 -- Chess960 incompatible
 getCastling :: Piece -> Move -> Maybe Castling
-getCastling (King, color) (Move (fromCell, toCell))
-    | color == White && fromCell == e1 && toCell == c1 = Just (Queenside, White)
-    | color == White && fromCell == e1 && toCell == g1 = Just (Kingside, White)
-    | color == Black && fromCell == e8 && toCell == c8 = Just (Queenside, Black)
-    | color == Black && fromCell == e8 && toCell == g8 = Just (Kingside, Black)
-    | otherwise = Nothing
+getCastling (King, color) move = findCastlingMove (map (\c -> (c, kingCastlingMove c)) (S.toList allCastlingRights)) move color
 getCastling _ _ = Nothing
+
+findCastlingMove :: [(Castling, Move)] -> Move -> Color -> Maybe Castling
+findCastlingMove [] _ _ = Nothing
+findCastlingMove (((direction, color'), move') : xs) move color =
+    if move == move' && color == color' then Just (direction, color) else findCastlingMove xs move color
 
 validateKingForCastling :: PositionContext -> Castling -> Bool
 validateKingForCastling pc castling
@@ -182,26 +180,54 @@ validateKingForCastling pc castling
         kingJourneyCells = kingCastlingJourneyCells castling
 
 -- Chess960 incompatible
-kingCastlingJourneyCells :: Castling -> [Cell]
-kingCastlingJourneyCells (Queenside, White) = [d1, c1]
-kingCastlingJourneyCells (Kingside, White) = [f1, g1]
-kingCastlingJourneyCells (Queenside, Black) = [d8, c8]
-kingCastlingJourneyCells (Kingside, Black) = [f8, g8]
+kingCastlingMove :: Castling -> Move
+kingCastlingMove castling = createMove (kingCastlingSource castling) (kingCastlingDestination castling)
 
 -- Chess960 incompatible
-getRookCastlingMove :: Castling -> Move
-getRookCastlingMove (Queenside, White) = createMove a1 d1
-getRookCastlingMove (Kingside, White) = createMove h1 f1
-getRookCastlingMove (Queenside, Black) = createMove a8 d8
-getRookCastlingMove (Kingside, Black) = createMove h8 f8
+kingCastlingSource :: Castling -> Cell
+kingCastlingSource (_, White) = e1
+kingCastlingSource (_, Black) = e8
+
+-- Chess960 incompatible
+kingCastlingDestination :: Castling -> Cell
+kingCastlingDestination (Kingside, White) = g1
+kingCastlingDestination (Kingside, Black) = g8
+kingCastlingDestination (Queenside, White) = c1
+kingCastlingDestination (Queenside, Black) = c8
+
+-- Chess960 incompatible
+kingCastlingJourneyCells :: Castling -> [Cell]
+kingCastlingJourneyCells (Kingside, White) = [f1, g1]
+kingCastlingJourneyCells (Kingside, Black) = [f8, g8]
+kingCastlingJourneyCells (Queenside, White) = [d1, c1]
+kingCastlingJourneyCells (Queenside, Black) = [d8, c8]
+
+-- Chess960 incompatible
+rookCastlingMove :: Castling -> Move
+rookCastlingMove castling = createMove (rookCastlingSource castling) (rookCastlingDestination castling)
+
+-- Chess960 incompatible
+rookCastlingSource :: Castling -> Cell
+rookCastlingSource (Kingside, White) = h1
+rookCastlingSource (Kingside, Black) = h8
+rookCastlingSource (Queenside, White) = a1
+rookCastlingSource (Queenside, Black) = a8
+
+-- Chess960 incompatible
+rookCastlingDestination :: Castling -> Cell
+rookCastlingDestination (Kingside, White) = f1
+rookCastlingDestination (Kingside, Black) = f8
+rookCastlingDestination (Queenside, White) = d1
+rookCastlingDestination (Queenside, Black) = d8
 
 validateRookForCastling :: PositionContext -> Move -> Bool
 validateRookForCastling pc (Move (fromCell, toCell)) =
     maybe False validate (getSquare (position pc) fromCell) where
-    validate (Rook, col) = let move = createMove fromCell toCell in
-                           pieceCanReach pc (Rook, col) move &&
-                           hasClearPath (position pc) (Rook, col) move
-    validate _ = False
+        validate (Rook, col) =
+            let move = createMove fromCell toCell in
+            pieceCanReach pc (Rook, col) move &&
+            hasClearPath (position pc) (Rook, col) move
+        validate _ = False
 
 getEnPassantCell :: PositionContext -> Piece -> Move -> Maybe Cell
 getEnPassantCell (PC { previousEnPassantCell = Just cell }) (Pawn, color) (Move (_, toCell))
@@ -465,6 +491,62 @@ isLegalNonPromotionMove pc move = isLegalMove pc move Nothing
 
 isLegalPromotion :: PositionContext -> Move -> PromotionTarget -> Bool
 isLegalPromotion pc move pt = isLegalMove pc move (Just pt)
+
+makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError PositionContext
+makeMove pc move mpt = movePiece pc <$> getMoveContext pc move mpt
+
+makeMove' :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError (MoveContext, PositionContext)
+makeMove' pc move mpt = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt
+
+makeUnderspecifiedMove :: PositionContext -> UnderspecifiedMove -> Either MoveError PositionContext
+makeUnderspecifiedMove = underspecifiedMove makeMove
+
+makeUnderspecifiedMove' :: PositionContext -> UnderspecifiedMove -> Either MoveError (MoveContext, PositionContext)
+makeUnderspecifiedMove' = underspecifiedMove makeMove'
+
+underspecifiedMove :: (PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError a) ->
+                       PositionContext -> UnderspecifiedMove -> Either MoveError a
+underspecifiedMove moveFunc pc (CastleMove direction) =
+    moveFunc pc (kingCastlingMove (direction, currentPlayer pc)) Nothing
+underspecifiedMove moveFunc pc unspecMove = do
+    fromCell <- getSourceCell pc unspecMove
+    moveFunc pc (createMove fromCell (knownToCell unspecMove)) (knownPromotionTarget unspecMove)
+
+makeNonPromotionMove :: PositionContext -> Move -> Either MoveError PositionContext
+makeNonPromotionMove pc move = makeMove pc move Nothing
+
+makePromotion :: PositionContext -> Move -> PromotionTarget -> Either MoveError PositionContext
+makePromotion pc move pt = makeMove pc move (Just pt)
+
+-- Disambiguation for underspecified moves.
+getSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
+getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
+getSourceCell (PC { currentPlayer = Black }) (CastleMove _) = return e8
+getSourceCell pc unspecMove =
+    case createCell <$> knownFromFile unspecMove <*> knownFromRank unspecMove of
+        Just c -> return c
+        Nothing -> disambiguateSourceCell pc unspecMove
+
+disambiguateSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
+disambiguateSourceCell pc unspecMove =
+    let toCell = knownToCell unspecMove
+        piece = knownPiece unspecMove
+        mFromFile = knownFromFile unspecMove
+        mFromRank = knownFromRank unspecMove in
+    case findCandidateSourceCells pc toCell piece mFromFile mFromRank of
+        [] -> Left NoPieceAtSourceSquare
+        [single] -> Right single
+        multiple -> Left $ InsufficientDisambiguation multiple
+
+findCandidateSourceCells :: PositionContext -> Cell -> Piece -> Maybe File -> Maybe Rank -> [Cell]
+findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
+    MC { mainFromCell = fromCell, mainToCell = toCell' } <- findAllLegalMoves pc
+    guard $ toCell == toCell'
+    let Cell (f, r) = fromCell
+    guard $ maybe True (== f) mFromFile
+    guard $ maybe True (== r) mFromRank
+    guard $ hasPieceOfType piece (position pc) fromCell
+    return fromCell
 
 -- Generic utils functions
 maybeToEither :: e -> Maybe a -> Either e a
