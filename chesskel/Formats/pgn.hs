@@ -21,11 +21,13 @@ data PgnError =
 
 type HeaderToken = (String, String)
 
-data GameToken = Game MoveNumberToken | EmptyGame
-data MoveNumberToken = MoveNumber Int WhiteMoveToken | FinalMoveNumber Int GameResultToken
-data WhiteMoveToken = WhiteMove PgnMove BlackMoveToken | FinalWhiteMove PgnMove GameResultToken
-data BlackMoveToken = BlackMove PgnMove MoveNumberToken | FinalBlackMove PgnMove GameResultToken
-data GameResultToken = GameResult Result
+data GameToken = Game MoveNumberToken | EmptyGame deriving (Eq)
+data MoveNumberToken = MoveNumber MoveNum WhiteMoveToken | FinalMoveNumber MoveNum GameResultToken deriving (Eq)
+data WhiteMoveToken = WhiteMove PgnMove BlackMoveToken | FinalWhiteMove PgnMove GameResultToken deriving (Eq)
+data BlackMoveToken = BlackMove PgnMove MoveNumberToken | FinalBlackMove PgnMove GameResultToken deriving (Eq)
+data GameResultToken = GameResult Result deriving (Eq)
+
+newtype MoveNum = MN Int deriving (Eq, Ord, Bounded)
 
 data PgnMove = PgnCastleMove CastlingDirection | PgnMove {
     pgnChessman :: Chessman,
@@ -37,27 +39,35 @@ data PgnMove = PgnCastleMove CastlingDirection | PgnMove {
     pgnCheckState :: Maybe CheckState
 } deriving (Eq)
 
-instance Show GameToken where
-    showsPrec _ EmptyGame = showString ""
-    showsPrec _ (Game moveNumberToken) = shows moveNumberToken
+data GameItem = MoveNumItem MoveNum | PgnMoveItem PgnMove | ResultItem Result deriving (Eq)
 
-instance Show MoveNumberToken where
-    showsPrec _ (FinalMoveNumber moveNum resultToken) = shows moveNum . showString ". " . shows resultToken
-    showsPrec _ (MoveNumber moveNum whiteMoveToken) = shows moveNum . showString ". " . shows whiteMoveToken
+class Token t where
+    gameItems :: t -> [GameItem]
 
-instance Show WhiteMoveToken where
-    showsPrec _ (FinalWhiteMove mv resultToken) = shows mv . showString " " . shows resultToken
-    showsPrec _ (WhiteMove mv blackMoveToken) = shows mv . showString " " . shows blackMoveToken
+instance Token GameToken where
+    gameItems EmptyGame = []
+    gameItems (Game moveNumberToken) = gameItems moveNumberToken
 
-instance Show BlackMoveToken where
-    showsPrec _ (FinalBlackMove mv resultToken) = shows mv . showString " " . shows resultToken
-    showsPrec _ (BlackMove mv moveNumberToken) = shows mv . showString " " . shows moveNumberToken
+instance Token MoveNumberToken where
+    gameItems (FinalMoveNumber moveNum resultToken) = MoveNumItem moveNum : gameItems resultToken
+    gameItems (MoveNumber moveNum whiteMoveToken) = MoveNumItem moveNum : gameItems whiteMoveToken
 
-instance Show GameResultToken where
-    showsPrec _ (GameResult res) = shows res
+instance Token WhiteMoveToken where
+    gameItems (FinalWhiteMove mv resultToken) = PgnMoveItem mv : gameItems resultToken
+    gameItems (WhiteMove mv blackMoveToken) = PgnMoveItem mv : gameItems blackMoveToken
+
+instance Token BlackMoveToken where
+    gameItems (FinalBlackMove mv resultToken) = PgnMoveItem mv : gameItems resultToken
+    gameItems (BlackMove mv moveNumberToken) = PgnMoveItem mv : gameItems moveNumberToken
+
+instance Token GameResultToken where
+    gameItems (GameResult res) = [ResultItem res]
+
+instance Show MoveNum where
+    show (MN n) = show n ++ "."
 
 instance Show PgnMove where
-    showsPrec _ (PgnCastleMove direction) = shows direction
+    showsPrec n (PgnCastleMove direction) = showsPrec n direction
     showsPrec _ mv = showChessman . showFromFile . showFromRank . showCapture . showToCell . showPromotion . showCheck where
         showChessman = sChessman (pgnChessman mv)
         showFromFile = maybe showEmpty sFile (pgnFromFile mv)
@@ -95,6 +105,11 @@ instance Show PgnMove where
         sCheck Check = showString "+"
         sCheck Checkmate = showString "#"
         showEmpty = showString ""
+
+instance Show GameItem where
+    show (MoveNumItem moveNum) = show moveNum
+    show (PgnMoveItem pgnMove) = show pgnMove
+    show (ResultItem res) = show res
 
 quote = char '"'
 headerTagValue = quote *> many (noneOf "\"") <* quote
@@ -175,11 +190,11 @@ draw = Draw <$ (string "1/2-1/2" <|> string "½-½")
 result = ongoing <|> try whiteWin <|> try blackWin <|> draw <?>
     "game result (* = ongoing, 1-0 = white win, 0-1 = black win, 1/2-1/2 = draw)"
 
-moveNumber :: Parser Int
+moveNumber :: Parser MoveNum
 moveNumber = do
     d <- many1 digit
     char '.'
-    return (read d)
+    return $ MN $ read d
 
 pawnCapture = try (file <* capture) >>= pawnMoveBody . Just
 
@@ -325,7 +340,7 @@ interpretGameResult (GameResult res) = setResult res
 -- We don't do any validation of the move numbers yet.
 interpretMoveNumber :: MoveNumberToken -> GameContext -> Either PgnError GameContext
 interpretMoveNumber (FinalMoveNumber _ resultToken) gc = return $ interpretGameResult resultToken gc
-interpretMoveNumber (MoveNumber moveN whiteMoveToken) gc = interpretWhiteMove moveN whiteMoveToken gc
+interpretMoveNumber (MoveNumber (MN moveN) whiteMoveToken) gc = interpretWhiteMove moveN whiteMoveToken gc
 
 interpretWhiteMove :: Int -> WhiteMoveToken -> GameContext -> Either PgnError GameContext
 interpretWhiteMove moveN (FinalWhiteMove mv resultToken) gc = interpretFinalMove moveN White resultToken mv gc
@@ -352,8 +367,8 @@ createWhiteMoveToken _ res x [] = FinalWhiteMove x (GameResult res)
 createWhiteMoveToken moveN res x (y:ys) = WhiteMove x (createBlackMoveToken moveN res y ys)
 
 createMoveNumberToken :: Int -> Result -> [PgnMove] -> MoveNumberToken
-createMoveNumberToken moveN res [] = FinalMoveNumber moveN (GameResult res)
-createMoveNumberToken moveN res (x:xs) = MoveNumber moveN (createWhiteMoveToken moveN res x xs)
+createMoveNumberToken moveN res [] = FinalMoveNumber (MN moveN) (GameResult res)
+createMoveNumberToken moveN res (x:xs) = MoveNumber (MN moveN) (createWhiteMoveToken moveN res x xs)
 
 createGameToken :: Result -> [PgnMove] -> GameToken
 createGameToken _ [] = EmptyGame
@@ -380,21 +395,34 @@ createPgnMoves gc
         unspecMoves <- createMinimallySpecifiedMoves gc
         -- We skip the first move because createPgnMove needs each move paired with the _next_ position,
         -- and the first position in the position list always precedes the first move in the move list.
+        -- The call to tail should be safe because the list of positions should never be empty, but
+        -- famous last words and all that.
         return $ zipWith createPgnMove (tail (positions gc)) unspecMoves
 
--- TODO: should divide into lines of less than 80 characters.
-writeGameToken :: GameToken -> ShowS
-writeGameToken = shows
+-- The PGN spec says that exported PGN strings should cut off the lines in the movetext at 80 characters.
+writeGameToken :: GameToken -> String
+writeGameToken = unlines . map unwords . cutLines 80 . map show . gameItems where
+
+-- Technically this function could be defined for all lists, but the behavior only
+-- truly makes sense for strings because of the +1 that's added for each item.
+cutLines :: Int -> [String] -> [[String]]
+cutLines maxLen = go 0 [] where
+    go _ acc [] = [acc]
+    go n acc (x:xs)
+        | newLen > maxLen = acc : go len [x] xs
+        | otherwise = go newLen (acc ++ [x]) xs where
+            len = length x
+            newLen = n + len + 1 -- +1 for the space that follows each item in the list.
 
 writeExtraHeaders :: [ExtraHeader] -> ShowS
 writeExtraHeaders [] = showString ""
 writeExtraHeaders (x:xs) = shows x . showString "\n" . writeExtraHeaders xs
 
 writeAllHeaderData :: AllHeaderData -> ShowS
-writeAllHeaderData (hd, extra) = shows hd . writeExtraHeaders extra
+writeAllHeaderData (hd, extra) = shows hd . showString "\n" . writeExtraHeaders extra
 
 writeGame :: AllHeaderData -> GameToken -> String
-writeGame hdata gameToken = writeAllHeaderData hdata . showString "\n\n" . writeGameToken gameToken $ ""
+writeGame hdata gameToken = writeAllHeaderData hdata . showString "\n" $ writeGameToken gameToken
 
 createGame :: GameContext -> Either MoveError GameToken
 createGame gc = createGameToken (gameResult gc) <$> createPgnMoves gc

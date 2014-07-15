@@ -20,4 +20,4 @@ forceReadPgn pgnFile = do
                 Right pgnString' -> return pgnString'
 
 profile :: IO ()
-profile = forceReadPgn standardPgnFile >>= print
+profile = forceReadPgn standardPgnFile >>= putStr
