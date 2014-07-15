@@ -32,7 +32,9 @@ module Chesskel.Board (
 ) where
 
 import Control.Arrow
+import Control.Monad
 import Data.Char
+import qualified Data.IntMap as IM
 import Data.Maybe
 import qualified Data.Vector as V
 
@@ -40,7 +42,10 @@ data Chessman = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
 data Color = White | Black deriving (Eq, Ord, Show)
 type Piece = (Chessman, Color)
 type Square = Maybe Piece
-newtype Position = Position (V.Vector Square) deriving (Eq)
+type Squares = V.Vector Square
+type PieceMap = IM.IntMap Piece
+newtype PositionCache = PositionCache PieceMap deriving (Eq)
+newtype Position = Position (Squares, PositionCache) deriving (Eq)
 
 data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 deriving (Eq, Ord, Bounded, Show)
 data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH deriving (Eq, Ord, Bounded, Show)
@@ -227,7 +232,7 @@ emptyRow :: [Square]
 emptyRow = replicate 8 Nothing
 
 getRows :: Position -> [[Square]]
-getRows (Position vector) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
+getRows (Position (vector, _)) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
 
 createCell :: File -> Rank -> Cell
 createCell file rank = Cell (file, rank)
@@ -236,10 +241,13 @@ allCells :: [Cell]
 allCells = enumFromTo minBound maxBound
 
 getSquare :: Position -> Cell -> Square
-getSquare (Position vector) cell = vector V.! fromEnum cell
+getSquare (Position (vector, _)) cell = vector V.! fromEnum cell
+
+getSquareFromCache :: PositionCache -> Cell -> Square
+getSquareFromCache (PositionCache pieceMap) cell = fromEnum cell `IM.lookup` pieceMap
 
 hasPiece :: Position -> Cell -> Bool
-hasPiece = hasPieceBy (const True)
+hasPiece (Position (_, PositionCache pieceMap)) cell = fromEnum cell `IM.member` pieceMap
 
 hasPieceOfType :: Piece -> Position -> Cell -> Bool
 hasPieceOfType piece = hasPieceBy (== piece)
@@ -250,14 +258,21 @@ hasPieceOfColor color = hasPieceBy (isColor color)
 hasPieceBy :: (Piece -> Bool) -> Position -> Cell -> Bool
 hasPieceBy predicate pos cell = maybe False predicate (getSquare pos cell)
 
-cellsAndSquares :: Position -> [(Cell, Square)]
-cellsAndSquares pos = map (\cell -> (cell, getSquare pos cell)) allCells 
+piecesOnly :: [Square] -> [(Int, Piece)]
+piecesOnly squares = do
+    (idx, square) <- zip [0..] squares
+    guard $ isJust square
+    return (idx, fromJust square)
 
-cellsAndPieces :: Position -> [(Cell, Piece)]
-cellsAndPieces = mapMaybe (\(cell, square) -> fmap ((,) cell) square) . cellsAndSquares
+makePieceMap :: [Square] -> PieceMap
+makePieceMap = IM.fromList . piecesOnly
+
+getPiecesFromMap :: PieceMap -> [(Cell, Piece)]
+getPiecesFromMap = map (first toEnum) . IM.assocs
 
 piecesOfColor :: Color -> Position -> [(Cell, Piece)]
-piecesOfColor color pos = filter (isColor color . snd) (cellsAndPieces pos)
+piecesOfColor color (Position (_, PositionCache pieceMap)) =
+    filter (isColor color . snd) $ getPiecesFromMap pieceMap
 
 emptyPosition :: Position
 emptyPosition = createPosition $ repeat Nothing
@@ -266,7 +281,20 @@ standardPosition :: Position
 standardPosition = createPosition $ concat startRows
 
 createPosition :: [Square] -> Position
-createPosition = Position . V.fromListN 64
+createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
+
+createPositionCache :: [Square] -> PositionCache
+createPositionCache squares = PositionCache $ makePieceMap squares
 
 updatePosition :: Position -> [(Cell, Square)] -> Position
-updatePosition (Position vector) updates = Position $ vector V.// map (first fromEnum) updates
+updatePosition (Position (board, cache)) updates =
+    Position (updateBoard board updates, updatePositionCache cache updates)
+
+updateBoard :: V.Vector Square -> [(Cell, Square)] -> V.Vector Square
+updateBoard vector updates = vector V.// map (first fromEnum) updates
+
+updatePositionCache :: PositionCache -> [(Cell, Square)] -> PositionCache
+updatePositionCache cache [] = cache
+updatePositionCache (PositionCache pieceMap) ((cell, square):xs) =
+    updatePositionCache (PositionCache (alterMap pieceMap)) xs where
+        alterMap = IM.alter (const square) (fromEnum cell)

@@ -1,4 +1,4 @@
-module Chesskel.Test (
+module Chesskel.Testing.Test (
     testCastling,
     testEnPassant,
     testCheckmate,
@@ -7,7 +7,6 @@ module Chesskel.Test (
 ) where
 
 import Chesskel.Board
-import Chesskel.Formats.Pgn
 import Chesskel.Movement
 import Control.Applicative
 import Data.Maybe
@@ -56,10 +55,6 @@ parsePiece 'q' = Just (Queen, Black)
 parsePiece 'k' = Just (King, Black)
 parsePiece _ = Nothing
 
-readPiece :: String -> Maybe Piece
-readPiece (c:[]) = parsePiece c
-readPiece _ = Nothing
-
 readLongNotationMove :: String -> Maybe (Move, Maybe PromotionTarget)
 readLongNotationMove moveStr
     | length moveStr == 5 = fmap (\move -> (move, Nothing)) (readMove firstFive)
@@ -85,7 +80,7 @@ testMove moveStr pc = fromJust $ do
     (move, mpt) <- readLongNotationMove moveStr
     case makeMove pc move mpt of
         Left e -> error $ moveStr ++ ": " ++ show e
-        Right (_, pc) -> return pc
+        Right (_, pc') -> return pc'
 
 testHasLegalMove :: String -> PositionContext -> Bool
 testHasLegalMove moveStr pc = maybe False (uncurry $ isLegalMove pc) (readLongNotationMove moveStr)
@@ -104,6 +99,7 @@ testHasPiece pieceStr cellStr pc = fromMaybe False $ do
     return $ expectedPiece == actualPiece
 
 -- Tests:
+testCastling, testEnPassant, testCheckmate, testStalemate, testPromotion :: Bool
 testCastling = testHasLegalMove "e1-g1" $ testFromStart ["g1-f3", "g8-f6", "g2-g3", "g7-g6", "f1-g2", "f8-g7"]
 testEnPassant = testHasLegalMove "e5-d6" $ testFromStart ["e2-e4", "g8-f6", "e4-e5", "d7-d5"]
 testCheckmate = isCheckmate $ testFromStart ["f2-f3", "e7-e6", "g2-g4", "d8-h4"]

@@ -155,7 +155,7 @@ getMoveError :: PositionContext -> MoveContext -> Maybe MoveError
 getMoveError pc mc
     | not $ pieceCanReach pc piece move = Just PieceCannotReachSquare
     | not $ hasClearPath (position pc) piece move = Just PieceCannotReachSquare
-    | isKingInCheck (currentPlayer pc) (position (movePiece pc mc)) = Just MoveWouldLeaveKingInCheck
+    | wouldMoveLeaveKingInCheck pc mc = Just MoveWouldLeaveKingInCheck
     | otherwise = Nothing where
         move = createMove (mainFromCell mc) (mainToCell mc)
         piece = mainPiece mc
@@ -275,6 +275,13 @@ movePiece pc mc =
         halfMoveClock = updateHalfMoveClock (halfMoveClock pc) (position pc) piece move,
         moveCount = updateMoveCount (moveCount pc) (currentPlayer pc)
     }
+
+wouldMoveLeaveKingInCheck :: PositionContext -> MoveContext -> Bool
+wouldMoveLeaveKingInCheck pc mc =
+    -- This creates a hypothetical next position without checking castling rights, en passant etc.
+    -- The only thing we care about here is whether the king would be left in check by the move.
+    let pc' = pc { position = updatePosition (position pc) (getPositionUpdates mc) } in
+    isKingInCheck (currentPlayer pc) (position pc')
 
 getPositionUpdates :: MoveContext -> [(Cell, Square)]
 getPositionUpdates mc =
