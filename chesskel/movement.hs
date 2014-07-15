@@ -82,7 +82,8 @@ data MoveError =
     PromotionIsNotNeeded |
     DoesNotHaveCastlingRights Castling |
     CastlingIsNotPossible Castling |
-    InsufficientDisambiguation [Cell] deriving (Eq, Show)
+    InsufficientDisambiguation [Cell] |
+    GameIsFinished deriving (Eq, Show)
 
 instance Enum Move where
     fromEnum (Move (fromCell, toCell)) = (fromEnum fromCell * 64) + fromEnum toCell

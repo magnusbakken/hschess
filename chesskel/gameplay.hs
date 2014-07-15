@@ -100,8 +100,12 @@ startGame pc (hd, extra) = GC {
 
 playMove :: Move -> Maybe PromotionTarget -> GameContext -> Either MoveError GameContext
 playMove move mpt gc = do
+    failIfGameIsFinished gc
     (mc, pc') <- makeMove (currentPosition gc) move mpt
     return $ updateGameContext mc pc' gc
+
+failIfGameIsFinished :: GameContext -> Either MoveError ()
+failIfGameIsFinished gc = if gameResult gc == Ongoing then Right () else Left GameIsFinished
 
 playUnderspecifiedMove :: UnderspecifiedMove -> GameContext -> Either MoveError GameContext
 playUnderspecifiedMove unspecMove gc = do
