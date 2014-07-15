@@ -1,9 +1,8 @@
 module Chesskel.Movement (
     Castling,
-    CastlingData (..),
     CastlingDirection (..),
     CheckState (..),
-    Move (..),
+    Move,
     MoveContext (..),
     MoveError (..),
     PositionContext (..),

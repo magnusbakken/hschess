@@ -1,5 +1,5 @@
 module Chesskel.Gameplay (
-    GameContext (..),
+    GameContext (currentPosition, positions, moves, mainHeaderData, extraHeaderData, gameResult),
     HeaderData (..),
     AllHeaderData,
     ExtraHeader (..),
