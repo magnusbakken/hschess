@@ -534,14 +534,13 @@ createMinimallySpecifiedMove pc mc =
     let fromCell = mainFromCell mc
         toCell = mainToCell mc
         piece = mainPiece mc
-        mpt = promotionTarget mc
         isCap = isCapture mc
-        candidates = findCandidateSourceCells pc toCell piece Nothing Nothing in
+        mpt = promotionTarget mc in
     -- In order:
     -- An empty list indicates that the move is not valid for the position. Should only happen if the game is invalid.
     -- A singleton list indicates that only one piece can reach the square. Disambiguation is only needed if the move is a pawn capture.
     -- Multiple pieces can reach the square. File and/or rank disambiguation is needed.
-    case candidates of
+    case findCandidateSourceCells pc toCell piece Nothing Nothing of
         [] -> Left PieceCannotReachSquare
         [_] -> Right $ resolveSimpleDisambiguation fromCell toCell piece isCap mpt
         multiple -> Right $ resolveDisambiguation fromCell toCell piece isCap mpt multiple
@@ -578,7 +577,7 @@ findLegalMoves pc (fromCell, piece) = do
     rights [getMoveContext pc (createMove fromCell toCell) pt]
 
 findAllLegalMoves :: PositionContext -> [MoveContext]
-findAllLegalMoves pc = concatMap (findLegalMoves pc) (piecesOfColor (currentPlayer pc) (position pc))
+findAllLegalMoves pc = piecesOfColor (currentPlayer pc) (position pc) >>= findLegalMoves pc
 
 isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
 isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt

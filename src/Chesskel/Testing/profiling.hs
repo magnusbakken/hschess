@@ -6,9 +6,6 @@ import System.IO
 readPgnFromFile :: FilePath -> IO String
 readPgnFromFile name = openFile name ReadMode >>= hGetContents
 
-standardPgnFile :: FilePath
-standardPgnFile = "../../../pgn/kasparov-topalov-1999.pgn"
-
 forceReadPgn :: FilePath -> IO String
 forceReadPgn pgnFile = do
     pgnString <- readPgnFromFile pgnFile
@@ -19,5 +16,5 @@ forceReadPgn pgnFile = do
                 Left err' -> error $ "Unable to write game: " ++ show err'
                 Right pgnString' -> return pgnString'
 
-profile :: IO ()
-profile = forceReadPgn standardPgnFile >>= putStr
+profile :: FilePath -> IO ()
+profile fp = forceReadPgn fp >>= putStr
