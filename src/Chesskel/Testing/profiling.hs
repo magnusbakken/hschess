@@ -7,7 +7,7 @@ readPgnFromFile :: FilePath -> IO String
 readPgnFromFile name = openFile name ReadMode >>= hGetContents
 
 standardPgnFile :: FilePath
-standardPgnFile = "d:/code/haskell/hschess/chesskel/testing/kasparov-topalov-1999.pgn"
+standardPgnFile = "../../../pgn/kasparov-topalov-1999.pgn"
 
 forceReadPgn :: FilePath -> IO String
 forceReadPgn pgnFile = do

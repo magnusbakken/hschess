@@ -13,13 +13,16 @@ build-type:          Simple
 stability:           alpha
 cabal-version:       >=1.8
 data-files:
-    Chesskel/Testing/kasparov-topalov-1999.pgn
+  pgn/kasparov-topalov-1999.pgn
 library
+  hs-source-dirs:    src/
   ghc-options:       -O -Wall
   exposed-modules:
+    Chesskel
     Chesskel.Board
     Chesskel.Movement
     Chesskel.Gameplay
+    Chesskel.Formats
     Chesskel.Formats.Pgn
     Chesskel.Formats.Fen
     Chesskel.Formats.Common
