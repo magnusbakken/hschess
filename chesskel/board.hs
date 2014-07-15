@@ -243,9 +243,6 @@ allCells = enumFromTo minBound maxBound
 getSquare :: Position -> Cell -> Square
 getSquare (Position (vector, _)) cell = vector V.! fromEnum cell
 
-getSquareFromCache :: PositionCache -> Cell -> Square
-getSquareFromCache (PositionCache pieceMap) cell = fromEnum cell `IM.lookup` pieceMap
-
 hasPiece :: Position -> Cell -> Bool
 hasPiece (Position (_, PositionCache pieceMap)) cell = fromEnum cell `IM.member` pieceMap
 

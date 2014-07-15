@@ -19,6 +19,7 @@ file = cr <$> oneOf "abcdefgh" <?> "file (a-h)" where
     cr 'f' = FileF
     cr 'g' = FileG
     cr 'h' = FileH
+    cr _ = error "Should never happen. Call the police"
 
 rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
     cr '1' = Rank1
@@ -29,5 +30,6 @@ rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
     cr '6' = Rank6
     cr '7' = Rank7
     cr '8' = Rank8
+    cr _ = error "Should never happen. Call the police"
 
 cell = createCell <$> file <*> rank <?> "square (a1-h8)"
