@@ -10,8 +10,10 @@ import Chesskel.Movement
 import Chesskel.Formats.Common
 import Chesskel.Gameplay
 import Control.Applicative hiding ((<|>), many)
+import Control.Monad
 import Data.Maybe
-import Text.ParserCombinators.Parsec
+import Text.Parsec
+import Text.Parsec.String
 
 data PgnError =
     PgnSyntaxError String |
@@ -144,21 +146,23 @@ rook = Rook <$ char 'R'
 bishop = Bishop <$ char 'B'
 knight = Knight <$ char 'N'
 pawn = Pawn <$ char 'P' -- Rarely used notation, but legal.
-chessman = king <|> queen <|> rook <|> bishop <|> knight <|> pawn
+chessman = king <|> queen <|> rook <|> bishop <|> knight <|> pawn <?>
+    "chessman (K=King, Q=Queen, R=Rook, B=Bishop, N=Knight or P=Pawn)"
 
 check = Check <$ char '+'
 checkmate = Checkmate <$ char '#'
-checkState = check <|> checkmate
+checkState = check <|> checkmate <?> "check indicator (+ = check, # = checkmate)"
 
 pQueen = PQueen <$ char 'Q'
 pRook = PRook <$ char 'R'
 pBishop = PBishop <$ char 'B'
 pKnight = PKnight <$ char 'N'
-pTarget = pQueen <|> pRook <|> pBishop <|> pKnight
+pTarget = pQueen <|> pRook <|> pBishop <|> pKnight <?>
+    "promotion target (Q=Queen, R=Rook, B=Bishop or N=Knight)"
 
 pawnPromotion = char '=' *> pTarget
 
-capture = () <$ char 'x'
+capture = void (char 'x')
 
 ongoing = Ongoing <$ string "*"
 whiteWin = WhiteWin <$ string "1-0"
@@ -168,7 +172,8 @@ draw = Draw <$ (string "1/2-1/2" <|> string "½-½")
 -- We need to backtrack after whiteWin because it starts with the same character as draw.
 -- The reason we backtrack after blackWin is more subtle: It's because it may start with the same characters as castling.
 -- The parser needs to handle both "4. 0-0 0-0" (both sides castle short) and "4. 0-0 0-1" (white castles short, then resigns).
-result = ongoing <|> try whiteWin <|> try blackWin <|> draw
+result = ongoing <|> try whiteWin <|> try blackWin <|> draw <?>
+    "game result (* = ongoing, 1-0 = white win, 0-1 = black win, 1/2-1/2 = draw)"
 
 moveNumber :: Parser Int
 moveNumber = do

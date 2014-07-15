@@ -284,7 +284,7 @@ createPosition :: [Square] -> Position
 createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
 
 createPositionCache :: [Square] -> PositionCache
-createPositionCache squares = PositionCache $ makePieceMap squares
+createPositionCache = PositionCache . makePieceMap
 
 updatePosition :: Position -> [(Cell, Square)] -> Position
 updatePosition (Position (board, cache)) updates =
@@ -294,7 +294,6 @@ updateBoard :: V.Vector Square -> [(Cell, Square)] -> V.Vector Square
 updateBoard vector updates = vector V.// map (first fromEnum) updates
 
 updatePositionCache :: PositionCache -> [(Cell, Square)] -> PositionCache
-updatePositionCache cache [] = cache
-updatePositionCache (PositionCache pieceMap) ((cell, square):xs) =
-    updatePositionCache (PositionCache (alterMap pieceMap)) xs where
-        alterMap = IM.alter (const square) (fromEnum cell)
+updatePositionCache = foldl alterPositionCache where
+    alterPositionCache (PositionCache pieceMap) (cell, square) =
+        PositionCache $ IM.alter (const square) (fromEnum cell) pieceMap

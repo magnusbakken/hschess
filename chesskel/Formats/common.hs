@@ -10,24 +10,24 @@ import Chesskel.Board
 import Control.Applicative hiding ((<|>), many)
 import Text.Parsec
 
-fileA = FileA <$ char 'a'
-fileB = FileB <$ char 'b'
-fileC = FileC <$ char 'c'
-fileD = FileD <$ char 'd'
-fileE = FileE <$ char 'e'
-fileF = FileF <$ char 'f'
-fileG = FileG <$ char 'g'
-fileH = FileH <$ char 'h'
-file = fileA <|> fileB <|> fileC <|> fileD <|> fileE <|> fileF <|> fileG <|> fileH
+file = cr <$> oneOf "abcdefgh" <?> "file (a-h)" where
+    cr 'a' = FileA
+    cr 'b' = FileB 
+    cr 'c' = FileC
+    cr 'd' = FileD
+    cr 'e' = FileE
+    cr 'f' = FileF
+    cr 'g' = FileG
+    cr 'h' = FileH
 
-rank1 = Rank1 <$ char '1'
-rank2 = Rank2 <$ char '2'
-rank3 = Rank3 <$ char '3'
-rank4 = Rank4 <$ char '4'
-rank5 = Rank5 <$ char '5'
-rank6 = Rank6 <$ char '6'
-rank7 = Rank7 <$ char '7'
-rank8 = Rank8 <$ char '8'
-rank = rank1 <|> rank2 <|> rank3 <|> rank4 <|> rank5 <|> rank6 <|> rank7 <|> rank8
+rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
+    cr '1' = Rank1
+    cr '2' = Rank2 
+    cr '3' = Rank3
+    cr '4' = Rank4
+    cr '5' = Rank5
+    cr '6' = Rank6
+    cr '7' = Rank7
+    cr '8' = Rank8
 
-cell = createCell <$> file <*> rank
+cell = createCell <$> file <*> rank <?> "square (a1-h8)"
