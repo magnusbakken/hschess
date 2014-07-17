@@ -43,6 +43,7 @@ import Chesskel.Movement
 import Control.Monad
 
 -- |A result represents the outcome of a game.
+--
 --  All games must have a result. If the result is unknown or if the game isn't finished,
 --  'Ongoing' should be used.
 data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
@@ -89,6 +90,7 @@ type AllHeaderData = (HeaderData, [ExtraHeader])
 
 -- |A game context encapsulates an entire chess game. It contains all the positions
 --  as well as all the moves from the game, and also game headers and the final result.
+--
 --  You should never modify this object directly. Always use the 'playMove' function(s)
 --  to ensure the game remains in a valid state.
 data GameContext = GC {
@@ -180,8 +182,9 @@ startGame pc (hd, extra) = GC {
 }
 
 -- |Plays a single move, with an optional promotion target (only applicable when
---  moving a pawn to a promotion square) and an optional move annotation).
---  May fail, in which case a MoveError is returned. Call 'isLegalMove' first if you want to
+--  moving a pawn to a promotion square) and an optional move annotation.
+--
+--  This may fail, in which case a MoveError is returned. Call 'isLegalMove' first if you want to
 --  ensure that the move is legal. However, attempting to play the move and handling the error
 --  is easier, since in the event of a move error you will have some idea why the move was not
 --  allowed based on the specific MoveError.
@@ -195,6 +198,7 @@ playMove move mpt mAnnotation gc = do
 --  e.g. PGN files where a move is specified as simply e4, without indicating the
 --  source square. At least a chessman and a destination square must be specified;
 --  the player is inferred from the current position of the game.
+--
 --  If there are multiple pieces that could've made the move, an 'InsufficientDisambiguation'
 --  will be returned, containing a list of available source cells.
 playUnderspecifiedMove :: UnderspecifiedMove -> GameContext -> Either MoveError GameContext
@@ -203,12 +207,14 @@ playUnderspecifiedMove unspecMove gc = do
     return $ updateGameContext mc pc' gc
 
 -- |Shorthand for moves that are guaranteed not to require a promotion target.
+--
 --  If the move requires a promotion target after all, a 'PromotionIsNeeded' error
 --  will be returned.
 playNonPromotionMove :: Move -> GameContext -> Either MoveError GameContext
 playNonPromotionMove move = playMove move Nothing Nothing
 
 -- |Shorthand for moves that are guaranteed to require a promotion target.
+--
 --  If the move doesn't require a promotion target after all, a 'PromotionIsNotNeeded'
 --  error will be returned.
 playPromotion :: Move -> PromotionTarget -> GameContext -> Either MoveError GameContext
@@ -226,6 +232,7 @@ makeDraw = setResult Draw
 
 -- |Sets the given result for the game. This allows you to set a game that was previously
 --  marked as finished back to 'Ongoing', or turn it from a 'Draw' into a win or vice versa.
+--
 --  When possible you should use resign and makeDraw instead, as the intent will be clearer.
 setResult :: Result -> GameContext -> GameContext
 setResult result gc = gc {
@@ -235,6 +242,7 @@ setResult result gc = gc {
 
 -- |Creates a list of underspecified moves, each of which has the minimum amount of
 --  disambiguation needed, for the given game.
+--
 --  This may return a MoveError because the game could potentially be in an invalid state.
 createMinimallySpecifiedMoves :: GameContext -> Either MoveError [UnderspecifiedMove]
 createMinimallySpecifiedMoves gc = zipWithM createMinimallySpecifiedMove (positions gc) (moves gc)
@@ -251,6 +259,7 @@ updateGameContext mc pc gc =
     }
 
 -- |Gets a result for the given position.
+--
 --  Returns 'WhiteWin' or 'BlackWin' if the other side is checkmated, 'Draw' if the position
 --  is a stalemate, and 'Ongoing' otherwise.
 getNewResult :: PositionContext -> Result

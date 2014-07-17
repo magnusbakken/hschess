@@ -43,7 +43,7 @@ module Chesskel.Board (
     -- |These cell literals are provided for testing and debugging purposes.
     --  It's quite useful to be able to use these to test ad-hoc moves and games:
     --
-    --  >>> playNonPromotionMove (createMove e2 e4) startStandardGame
+    --  > playNonPromotionMove (createMove e2 e4) startStandardGame
     --
     --  However, if they turn out to be too much a nuisance on account of having simple names that
     --  may clash with many other variables and functions, they may be moved to a separate module.
@@ -70,7 +70,8 @@ import qualified Data.Vector as V
 data Chessman = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
 
 -- |Each color represents one of the two players.
---  Note! It may seem surprising that Color is part of the 'Ord' class, with White < Black.
+--
+--  Note! It may seem surprising that Color is part of the 'Ord' class, with 'White' < 'Black'.
 --  The reason is that the IntMap data structure is currently used internally, and it
 --  requires the data you put in it to be ordered. The Ord instance for Color should not be
 --  relied upon, and may be removed in the future.
@@ -80,6 +81,7 @@ data Color = White | Black deriving (Eq, Ord, Show)
 type Piece = (Chessman, Color)
 
 -- |A square is either a piece or Nothing.
+--
 --  Squares don't know where they are on the board. To identify board coordinates you need to use the Cell type.
 type Square = Maybe Piece
 
@@ -94,15 +96,18 @@ type PieceMap = IM.IntMap Piece
 newtype PositionCache = PositionCache PieceMap deriving (Eq)
 
 -- |A position represents a single setup of pieces on the chess board.
+--
 --  This type is not sufficient for determining the current position of a game, since it contains
 --  only the board and doesn't know anything about the current player, castling rights, etc.
 --  The type that has all the remaining position information is the 'PositionContext' type.
+--
 --  This data type is abstract. Consumers should not have to care what storage mechanism is used internally.
 newtype Position = Position (Squares, PositionCache) deriving (Eq)
 
 -- |A position context is a wrapper for the 'Position' type that contains extra information
---  that cannot be extrapolated from the board itself. This data structure contains all the
---  necessary information to create a FEN.
+--  that cannot be extrapolated from the board itself.
+--
+--  This data structure contains all the necessary information to create a FEN.
 data PositionContext = PC {
     -- |The actual position.
     position :: Position,
@@ -110,17 +115,21 @@ data PositionContext = PC {
     -- |The player whose turn it is to move.
     currentPlayer :: Color,
     
-    -- |A set of castling rights for the two sides. Players lose all castling rights when they
-    --  move their king, and lose castling rights on one side when they move the rook on that side.
+    -- |A set of castling rights for both players.
+    --
+    --  Players lose all castling rights when they move their king, and lose castling rights on one side
+    --  when they move the rook on that side.
     castlingRights :: S.Set Castling,
     
-    -- |The previous en passant cell. When the previous move was a double pawn move, this will be the
-    --  cell that was skipped. For instance, if the previous move was white moving a pawn from d2 to d4,
-    --  this will be set to e3.
+    -- |The previous en passant cell.
+    --
+    --  When the previous move was a double pawn move, this will be the cell that was skipped.
+    --  For instance, if the previous move was white moving a pawn from d2 to d4, this will be set to d3.
     previousEnPassantCell :: Maybe Cell,
     
-    -- |The number of half-moves (plies) since a pawn was pushed or a piece was captured. This number is
-    --  is used for the 50 move rule, which lets either player claim a draw when this number reaches 50.
+    -- |The number of half-moves (plies) since a pawn was pushed or a piece was captured.
+    --
+    --  This number is used for the 50 move rule, which lets either player claim a draw when this number reaches 50.
     halfMoveClock :: Int,
     
     -- |The number of full moves (one move by each player) since the beginning of the game.
@@ -134,6 +143,7 @@ data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 derivi
 data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH deriving (Eq, Ord, Bounded, Show)
 
 -- |A cell represents the coordinates of one of the tiles on the chess board.
+--
 --  It's a combination of a file and a rank, and is usually designated by names such as a1, a2, etc.
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
 
@@ -225,6 +235,7 @@ shortRank Rank7 = '7'
 shortRank Rank8 = '8'
 
 -- |Gets the letter corresponding to the given piece.
+--
 --  This is used for the Show instance of the Position type.
 pieceToChar :: Piece -> Char
 pieceToChar (Pawn, color) = colorize 'P' color
@@ -247,7 +258,10 @@ showSquare (Just piece) = [pieceToChar piece]
 showRow :: [Square] -> String
 showRow = unwords . map showSquare
 
--- |The opposite color of the given one.
+-- | The opposite color of the given one.
+-- 
+-- >  otherColor White == Black
+-- >  otherColor Black == White
 otherColor :: Color -> Color
 otherColor White = Black
 otherColor Black = White
@@ -352,6 +366,7 @@ standardPosition :: Position
 standardPosition = createPosition $ concat startRows
 
 -- |Creates a new position based on the given list of squares.
+--
 --  Behavior is undefined if the list doesn't have precisely 64 items in it.
 createPosition :: [Square] -> Position
 createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
@@ -360,8 +375,10 @@ createPosition squares = Position (V.fromListN 64 squares, createPositionCache s
 createPositionCache :: [Square] -> PositionCache
 createPositionCache = PositionCache . makePieceMap
 
--- |Updates the given position with a list of changes. Each update indicates what cell to change,
---  and whether to put a piece there, or to vacate the cell if the value is Nothing.
+-- |Updates the given position with a list of changes.
+--
+--  Each update indicates what cell to change, and whether to put a piece there,
+--  or to vacate the cell if the value is Nothing.
 updatePosition :: Position -> [(Cell, Square)] -> Position
 updatePosition (Position (board, cache)) updates =
     Position (updateBoard board updates, updatePositionCache cache updates)
