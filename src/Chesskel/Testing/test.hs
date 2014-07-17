@@ -78,7 +78,7 @@ readPromotionTarget _ = Nothing
 testMove :: String -> PositionContext -> PositionContext
 testMove moveStr pc = fromJust $ do
     (move, mpt) <- readLongNotationMove moveStr
-    case makeMove pc move mpt of
+    case makeMove pc move mpt Nothing of
         Left e -> error $ moveStr ++ ": " ++ show e
         Right (_, pc') -> return pc'
 

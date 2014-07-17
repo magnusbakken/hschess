@@ -3,6 +3,7 @@ module Chesskel.Movement (
     CastlingDirection (..),
     CheckState (..),
     Move,
+    MoveAnnotation (..),
     MoveContext (..),
     MoveError (..),
     PositionContext (..),
@@ -25,12 +26,14 @@ module Chesskel.Movement (
 ) where
 
 import Chesskel.Board
+import Chesskel.Utils
 import Control.Applicative
 import Control.Monad
 import Data.Either
-import Data.Maybe
 import qualified Data.List as L
+import Data.Maybe
 import qualified Data.Set as S
+import qualified Data.Text as T
 
 newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
 data MoveContext = MC {
@@ -41,16 +44,20 @@ data MoveContext = MC {
     isCapture :: Bool,
     enPassantCell :: Maybe Cell,
     castlingData :: Maybe CastlingData,
-    promotionTarget :: Maybe PromotionTarget
+    promotionTarget :: Maybe PromotionTarget,
+    moveAnnotation :: Maybe MoveAnnotation
 } deriving (Eq)
 
-data UnderspecifiedMove = CastleMove CastlingDirection | UM {
+newtype MoveAnnotation = MA T.Text deriving (Eq, Ord)
+
+data UnderspecifiedMove = CastleMove CastlingDirection (Maybe MoveAnnotation) | UM {
     knownToCell :: Cell,
     knownPiece :: Piece,
     knownFromFile :: Maybe File,
     knownFromRank :: Maybe Rank,
     knownIsCapture :: Bool,
-    knownPromotionTarget :: Maybe PromotionTarget
+    knownPromotionTarget :: Maybe PromotionTarget,
+    knownMoveAnnotation :: Maybe MoveAnnotation
 } deriving (Eq)
 
 data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
@@ -133,8 +140,8 @@ getPieceForPromotionTarget color PBishop = (Bishop, color)
 getPieceForPromotionTarget color PRook = (Rook, color)
 getPieceForPromotionTarget color PQueen = (Queen, color)
 
-getMoveContext :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError MoveContext
-getMoveContext pc (Move (fromCell, toCell)) mpt = do
+getMoveContext :: PositionContext -> Move -> Maybe PromotionTarget -> Maybe MoveAnnotation -> Either MoveError MoveContext
+getMoveContext pc (Move (fromCell, toCell)) mpt mAnnotation = do
     piece <- maybeToEither NoPieceAtSourceSquare $ getSquare (position pc) fromCell
     let move = createMove fromCell toCell
     mcd <- getCastlingDataIfNecessary pc piece move
@@ -147,7 +154,8 @@ getMoveContext pc (Move (fromCell, toCell)) mpt = do
         isCapture = isMoveCapture (position pc) move,
         enPassantCell = getEnPassantCell pc piece move,
         castlingData = mcd,
-        promotionTarget = mPromotionTarget
+        promotionTarget = mPromotionTarget,
+        moveAnnotation = mAnnotation
     }
     maybe (Right mc) Left (getMoveError pc mc)
 
@@ -497,8 +505,8 @@ isMovePromotion _ _ = False
 
 -- Disambiguation for underspecified moves.
 getSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
-getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
-getSourceCell (PC { currentPlayer = Black }) (CastleMove _) = return e8
+getSourceCell (PC { currentPlayer = White }) (CastleMove _ _) = return e1
+getSourceCell (PC { currentPlayer = Black }) (CastleMove _ _) = return e8
 getSourceCell pc unspecMove =
     case createCell <$> knownFromFile unspecMove <*> knownFromRank unspecMove of
         Just c -> return c
@@ -526,7 +534,8 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
     return fromCell
 
 createMinimallySpecifiedMove :: PositionContext -> MoveContext -> Either MoveError UnderspecifiedMove
-createMinimallySpecifiedMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }) }) = Right $ CastleMove direction
+createMinimallySpecifiedMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
+    Right $ CastleMove direction mAnnotation
 createMinimallySpecifiedMove pc mc =
     -- Find candidates when we only specify the destination and the piece.
     -- If there's only a single result we don't need any disambiguation.
@@ -535,32 +544,33 @@ createMinimallySpecifiedMove pc mc =
         toCell = mainToCell mc
         piece = mainPiece mc
         isCap = isCapture mc
-        mpt = promotionTarget mc in
+        mpt = promotionTarget mc
+        mAnnotation = moveAnnotation mc in
     -- In order:
     -- An empty list indicates that the move is not valid for the position. Should only happen if the game is invalid.
     -- A singleton list indicates that only one piece can reach the square. Disambiguation is only needed if the move is a pawn capture.
     -- Multiple pieces can reach the square. File and/or rank disambiguation is needed.
     case findCandidateSourceCells pc toCell piece Nothing Nothing of
         [] -> Left PieceCannotReachSquare
-        [_] -> Right $ resolveSimpleDisambiguation fromCell toCell piece isCap mpt
-        multiple -> Right $ resolveDisambiguation fromCell toCell piece isCap mpt multiple
+        [_] -> Right $ resolveSimpleDisambiguation fromCell toCell piece isCap mpt mAnnotation
+        multiple -> Right $ resolveDisambiguation fromCell toCell piece isCap mpt mAnnotation multiple
 
 -- Disambiguate by file iff the piece is a pawn and the move is a capture.
-resolveSimpleDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> UnderspecifiedMove
-resolveSimpleDisambiguation (Cell (fromFile, _)) toCell (Pawn, color) True mpt =
-    UM toCell (Pawn, color) (Just fromFile) Nothing True mpt 
-resolveSimpleDisambiguation _ toCell piece isCap mpt =
-    UM toCell piece Nothing Nothing isCap mpt 
+resolveSimpleDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> Maybe MoveAnnotation -> UnderspecifiedMove
+resolveSimpleDisambiguation (Cell (fromFile, _)) toCell (Pawn, color) True mpt mAnnotation =
+    UM toCell (Pawn, color) (Just fromFile) Nothing True mpt mAnnotation
+resolveSimpleDisambiguation _ toCell piece isCap mpt mAnnotation =
+    UM toCell piece Nothing Nothing isCap mpt mAnnotation
 
-resolveDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> [Cell] -> UnderspecifiedMove
-resolveDisambiguation (Cell (actualFile, actualRank)) toCell piece isCap mpt possibleCells =
+resolveDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> Maybe MoveAnnotation -> [Cell] -> UnderspecifiedMove
+resolveDisambiguation (Cell (actualFile, actualRank)) toCell piece isCap mpt mAnnotation possibleCells =
     -- Given an actual move, figure out how much we need to disambiguate based on a given list of possible source cells.
     let candidateCells = L.delete (Cell (actualFile, actualRank)) possibleCells
         hasOnFile = hasOtherOnFile candidateCells
         hasOnRank = hasOtherOnRank candidateCells
         fileIfNecessary = if hasOnRank || (not hasOnFile && not hasOnRank) then Just actualFile else Nothing
         rankIfNecessary = if hasOnFile then Just actualRank else Nothing in
-    UM toCell piece fileIfNecessary rankIfNecessary isCap mpt
+    UM toCell piece fileIfNecessary rankIfNecessary isCap mpt mAnnotation
     where
         hasOtherOnFile = any (\(Cell (file, _)) -> file == actualFile)
         hasOtherOnRank = any (\(Cell (_, rank)) -> rank == actualRank)
@@ -574,13 +584,13 @@ findLegalMoves :: PositionContext -> (Cell, Piece) -> [MoveContext]
 findLegalMoves pc (fromCell, piece) = do
     toCell <- allCells
     pt <- getPossiblePromotionTargets piece (createMove fromCell toCell)
-    rights [getMoveContext pc (createMove fromCell toCell) pt]
+    rights [getMoveContext pc (createMove fromCell toCell) pt Nothing]
 
 findAllLegalMoves :: PositionContext -> [MoveContext]
 findAllLegalMoves pc = piecesOfColor (currentPlayer pc) (position pc) >>= findLegalMoves pc
 
 isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
-isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt
+isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt Nothing
 
 isLegalNonPromotionMove :: PositionContext -> Move -> Bool
 isLegalNonPromotionMove pc move = isLegalMove pc move Nothing
@@ -588,26 +598,20 @@ isLegalNonPromotionMove pc move = isLegalMove pc move Nothing
 isLegalPromotion :: PositionContext -> Move -> PromotionTarget -> Bool
 isLegalPromotion pc move pt = isLegalMove pc move (Just pt)
 
-makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Either MoveError (MoveContext, PositionContext)
-makeMove pc move mpt = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt
+makeMove :: PositionContext -> Move -> Maybe PromotionTarget -> Maybe MoveAnnotation -> Either MoveError (MoveContext, PositionContext)
+makeMove pc move mpt mAnnotation = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt mAnnotation
 
 makeUnderspecifiedMove :: PositionContext -> UnderspecifiedMove -> Either MoveError (MoveContext, PositionContext)
-makeUnderspecifiedMove pc (CastleMove direction) =
-    makeMove pc (kingCastlingMove (direction, currentPlayer pc)) Nothing
+makeUnderspecifiedMove pc (CastleMove direction mAnnotation) =
+    makeMove pc (kingCastlingMove (direction, currentPlayer pc)) Nothing mAnnotation
 makeUnderspecifiedMove pc unspecMove = do
     fromCell <- getSourceCell pc unspecMove
-    makeMove pc (createMove fromCell (knownToCell unspecMove)) (knownPromotionTarget unspecMove)
+    makeMove pc (createMove fromCell (knownToCell unspecMove)) mPromotionTarget mAnnotation where
+        mPromotionTarget = knownPromotionTarget unspecMove
+        mAnnotation = knownMoveAnnotation unspecMove
 
 makeNonPromotionMove :: PositionContext -> Move -> Either MoveError (MoveContext, PositionContext)
-makeNonPromotionMove pc move = makeMove pc move Nothing
+makeNonPromotionMove pc move = makeMove pc move Nothing Nothing
 
 makePromotion :: PositionContext -> Move -> PromotionTarget -> Either MoveError (MoveContext, PositionContext)
-makePromotion pc move pt = makeMove pc move (Just pt)
-
--- Generic utils functions
-maybeToEither :: e -> Maybe a -> Either e a
-maybeToEither e = maybe (Left e) Right
-
-isRight :: Either e a -> Bool -- Added to Data.Either in recent GHC version.
-isRight (Right _) = True
-isRight (Left _) = False
+makePromotion pc move pt = makeMove pc move (Just pt) Nothing

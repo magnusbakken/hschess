@@ -29,9 +29,11 @@ library
   other-modules:
     Chesskel.Testing.Test
     Chesskel.Testing.Profiling
+    Chesskel.Utils
   build-depends:
       base       == 4.6.*
     , containers == 0.5.*
     , parsec     == 3.1.*
+    , text       == 0.11.*
     , vector     == 0.10.*
   

@@ -9,9 +9,11 @@ import Chesskel.Board
 import Chesskel.Movement
 import Chesskel.Formats.Common
 import Chesskel.Gameplay
+import Chesskel.Utils
 import Control.Applicative hiding ((<|>), many)
 import Control.Monad
 import Data.Maybe
+import qualified Data.Text as T
 import Text.Parsec
 import Text.Parsec.String
 
@@ -23,11 +25,14 @@ type HeaderToken = (String, String)
 
 data GameToken = Game MoveNumberToken | EmptyGame deriving (Eq)
 data MoveNumberToken = MoveNumber MoveNum WhiteMoveToken | FinalMoveNumber MoveNum GameResultToken deriving (Eq)
-data WhiteMoveToken = WhiteMove PgnMove BlackMoveToken | FinalWhiteMove PgnMove GameResultToken deriving (Eq)
-data BlackMoveToken = BlackMove PgnMove MoveNumberToken | FinalBlackMove PgnMove GameResultToken deriving (Eq)
+data WhiteMoveToken = WhiteMove MoveToken BlackMoveToken | FinalWhiteMove MoveToken GameResultToken deriving (Eq)
+data BlackMoveToken = BlackMove MoveToken MoveNumberToken | FinalBlackMove MoveToken GameResultToken deriving (Eq)
+data MoveToken = AnnotatedMove PgnMove AnnotationToken | UnannotatedMove PgnMove deriving (Eq)
+data AnnotationToken = Annotation PgnAnnotation deriving (Eq)
 data GameResultToken = GameResult Result deriving (Eq)
 
 newtype MoveNum = MN Int deriving (Eq, Ord, Bounded)
+newtype PgnAnnotation = MkPgnAnnotation T.Text deriving (Eq, Ord)
 
 data PgnMove = PgnCastleMove CastlingDirection | PgnMove {
     pgnChessman :: Chessman,
@@ -39,29 +44,44 @@ data PgnMove = PgnCastleMove CastlingDirection | PgnMove {
     pgnCheckState :: Maybe CheckState
 } deriving (Eq)
 
-data GameItem = MoveNumItem MoveNum | PgnMoveItem PgnMove | ResultItem Result deriving (Eq)
+type AnnotatedPgnMove = (PgnMove, Maybe PgnAnnotation)
+
+data GameItem = MoveNumItem MoveNum |
+                PgnMoveItem PgnMove |
+                AnnotatedPgnMoveItem PgnMove PgnAnnotation |
+                ResultItem Result deriving (Eq)
 
 class Token t where
     gameItems :: t -> [GameItem]
+
+class LeafToken t where
+    gameItem :: t -> GameItem
 
 instance Token GameToken where
     gameItems EmptyGame = []
     gameItems (Game moveNumberToken) = gameItems moveNumberToken
 
 instance Token MoveNumberToken where
-    gameItems (FinalMoveNumber moveNum resultToken) = MoveNumItem moveNum : gameItems resultToken
-    gameItems (MoveNumber moveNum whiteMoveToken) = MoveNumItem moveNum : gameItems whiteMoveToken
+    gameItems (FinalMoveNumber moveNum resultToken) = [gameItem moveNum, gameItem resultToken]
+    gameItems (MoveNumber moveNum whiteMoveToken) = gameItem moveNum : gameItems whiteMoveToken
 
 instance Token WhiteMoveToken where
-    gameItems (FinalWhiteMove mv resultToken) = PgnMoveItem mv : gameItems resultToken
-    gameItems (WhiteMove mv blackMoveToken) = PgnMoveItem mv : gameItems blackMoveToken
+    gameItems (FinalWhiteMove moveToken resultToken) = [gameItem moveToken, gameItem resultToken]
+    gameItems (WhiteMove moveToken blackMoveToken) = gameItem moveToken : gameItems blackMoveToken
 
 instance Token BlackMoveToken where
-    gameItems (FinalBlackMove mv resultToken) = PgnMoveItem mv : gameItems resultToken
-    gameItems (BlackMove mv moveNumberToken) = PgnMoveItem mv : gameItems moveNumberToken
+    gameItems (FinalBlackMove moveToken resultToken) = [gameItem moveToken, gameItem resultToken]
+    gameItems (BlackMove moveToken moveNumberToken) = gameItem moveToken : gameItems moveNumberToken
 
-instance Token GameResultToken where
-    gameItems (GameResult res) = [ResultItem res]
+instance LeafToken MoveToken where
+    gameItem (AnnotatedMove mv (Annotation ann)) = AnnotatedPgnMoveItem mv ann
+    gameItem (UnannotatedMove mv) = PgnMoveItem mv
+
+instance LeafToken MoveNum where
+    gameItem = MoveNumItem
+
+instance LeafToken GameResultToken where
+    gameItem (GameResult res) = ResultItem res
 
 instance Show MoveNum where
     show (MN n) = show n ++ "."
@@ -106,9 +126,13 @@ instance Show PgnMove where
         sCheck Checkmate = showString "#"
         showEmpty = showString ""
 
+instance Show PgnAnnotation where
+    show (MkPgnAnnotation s) = "{" ++ T.unpack s ++ "}"
+
 instance Show GameItem where
     show (MoveNumItem moveNum) = show moveNum
     show (PgnMoveItem pgnMove) = show pgnMove
+    show (AnnotatedPgnMoveItem pgnMove ann) = show pgnMove ++ " " ++ show ann
     show (ResultItem res) = show res
 
 quote = char '"'
@@ -271,21 +295,31 @@ castling = try castleLong <|> castleShort
 
 ply = castling <|> pawnMove <|> nonPawnMove
 
-middleWhiteMove = middleMove WhiteMove blackMove
-middleBlackMove = middleMove BlackMove astMoveNumber
-middleMove tokenType next = do
+annotation = do
+    char '{'
+    ann <- many (noneOf "{}")
+    char '}'
+    many1 space
+    return $ MkPgnAnnotation (T.replace (T.pack "\n") (T.pack " ") (T.pack ann))
+
+moveAndAnnotation = do
     mv <- ply
     many1 space
-    nextToken <- next
-    return $ tokenType mv nextToken
+    mAnnotation <- optionMaybe annotation
+    case mAnnotation of
+        Nothing -> return $ UnannotatedMove mv
+        Just ann -> return $ AnnotatedMove mv (Annotation ann)
+
+middleWhiteMove = middleMove WhiteMove blackMove
+middleBlackMove = middleMove BlackMove astMoveNumber
+middleMove tokenType next = tokenType <$> moveAndAnnotation <*> next
 
 finalWhiteMove = finalMove FinalWhiteMove
 finalBlackMove = finalMove FinalBlackMove
 finalMove tokenType = do
-    mv <- ply
-    many1 space
+    moveToken <- moveAndAnnotation
     res <- result
-    return (tokenType mv (GameResult res))
+    return $ tokenType moveToken (GameResult res)
 
 middleMoveNumber = do
     moveNum <- moveNumber
@@ -319,20 +353,32 @@ mapGameplayError moveN color pgnMove (Left e) =
         moveStr = show moveN ++ dots ++ " " ++ show pgnMove in
     Left $ InvalidMoveError $ "Invalid move: " ++ moveStr ++ " (" ++ show e ++ ")"
 
-createUnderspecifiedMove :: PositionContext -> PgnMove -> UnderspecifiedMove
-createUnderspecifiedMove _ (PgnCastleMove direction) = CastleMove direction
-createUnderspecifiedMove pc pgnMove = UM {
+mapPgnAnnotation :: PgnAnnotation -> MoveAnnotation
+mapPgnAnnotation (MkPgnAnnotation s) = MA s
+
+mapMoveAnnotation :: MoveAnnotation -> PgnAnnotation
+mapMoveAnnotation (MA s) = MkPgnAnnotation s
+
+createUnderspecifiedMove :: PositionContext -> AnnotatedPgnMove -> UnderspecifiedMove
+createUnderspecifiedMove _ (PgnCastleMove direction, mAnnotation) = CastleMove direction (fmap mapPgnAnnotation mAnnotation)
+createUnderspecifiedMove pc (pgnMove, mAnnotation) = UM {
     knownToCell = pgnToCell pgnMove,
     knownPiece = (pgnChessman pgnMove, currentPlayer pc),
     knownFromFile = pgnFromFile pgnMove,
     knownFromRank = pgnFromRank pgnMove,
     knownIsCapture = pgnIsCapture pgnMove,
-    knownPromotionTarget = pgnPromotionTarget pgnMove
+    knownPromotionTarget = pgnPromotionTarget pgnMove,
+    knownMoveAnnotation = fmap mapPgnAnnotation mAnnotation
 }
 
-interpretMove :: Int -> Color -> PgnMove -> GameContext -> Either PgnError GameContext
-interpretMove moveN color pgnMove gc = 
-    mapGameplayError moveN color pgnMove $ playUnderspecifiedMove (createUnderspecifiedMove (currentPosition gc) pgnMove) gc
+interpretPgnMove :: Int -> Color -> AnnotatedPgnMove -> GameContext -> Either PgnError GameContext
+interpretPgnMove moveN color (pgnMove, mAnnotation) gc =
+    mapGameplayError moveN color pgnMove $
+        playUnderspecifiedMove (createUnderspecifiedMove (currentPosition gc) (pgnMove, mAnnotation)) gc
+
+interpretMove :: Int -> Color -> MoveToken -> GameContext -> Either PgnError GameContext
+interpretMove moveN color (AnnotatedMove pgnMove (Annotation ann)) gc = interpretPgnMove moveN color (pgnMove, Just ann) gc
+interpretMove moveN color (UnannotatedMove pgnMove) gc = interpretPgnMove moveN color (pgnMove, Nothing) gc
 
 interpretGameResult :: GameResultToken -> GameContext -> GameContext
 interpretGameResult (GameResult res) = setResult res
@@ -343,39 +389,43 @@ interpretMoveNumber (FinalMoveNumber _ resultToken) gc = return $ interpretGameR
 interpretMoveNumber (MoveNumber (MN moveN) whiteMoveToken) gc = interpretWhiteMove moveN whiteMoveToken gc
 
 interpretWhiteMove :: Int -> WhiteMoveToken -> GameContext -> Either PgnError GameContext
-interpretWhiteMove moveN (FinalWhiteMove mv resultToken) gc = interpretFinalMove moveN White resultToken mv gc
-interpretWhiteMove moveN (WhiteMove mv blackMoveToken) gc = interpretMove moveN White mv gc >>= interpretBlackMove moveN blackMoveToken
+interpretWhiteMove moveN (FinalWhiteMove moveToken resultToken) gc = interpretFinalMove moveN White resultToken moveToken gc
+interpretWhiteMove moveN (WhiteMove moveToken blackMoveToken) gc = interpretMove moveN White moveToken gc >>= interpretBlackMove moveN blackMoveToken
 
 interpretBlackMove :: Int -> BlackMoveToken -> GameContext -> Either PgnError GameContext
-interpretBlackMove moveN (FinalBlackMove mv resultToken) gc = interpretFinalMove moveN Black resultToken mv gc
-interpretBlackMove moveN (BlackMove mv moveNumberToken) gc = interpretMove moveN Black mv gc >>= interpretMoveNumber moveNumberToken
+interpretBlackMove moveN (FinalBlackMove moveToken resultToken) gc = interpretFinalMove moveN Black resultToken moveToken gc
+interpretBlackMove moveN (BlackMove moveToken moveNumberToken) gc = interpretMove moveN Black moveToken gc >>= interpretMoveNumber moveNumberToken
 
-interpretFinalMove :: Int -> Color -> GameResultToken -> PgnMove -> GameContext -> Either PgnError GameContext
-interpretFinalMove moveN color resultToken mv gc = interpretGameResult resultToken <$> interpretMove moveN color mv gc
+interpretFinalMove :: Int -> Color -> GameResultToken -> MoveToken -> GameContext -> Either PgnError GameContext
+interpretFinalMove moveN color resultToken moveToken gc = interpretGameResult resultToken <$> interpretMove moveN color moveToken gc
 
 -- We currently don't support partial games, i.e. games where the first move in the text isn't move 1.
 interpretGame :: GameToken -> AllHeaderData -> Either PgnError GameContext
 interpretGame EmptyGame hd = return (startGame startPosition hd)
 interpretGame (Game moveNumberToken) hd = interpretMoveNumber moveNumberToken (startGame startPosition hd)
 
-createBlackMoveToken :: Int -> Result -> PgnMove -> [PgnMove] -> BlackMoveToken
-createBlackMoveToken _ res x [] = FinalBlackMove x (GameResult res)
-createBlackMoveToken moveN res x xs = BlackMove x (createMoveNumberToken (moveN+1) res xs)
+createMoveToken :: AnnotatedPgnMove -> MoveToken
+createMoveToken (pgnMove, Nothing) = UnannotatedMove pgnMove
+createMoveToken (pgnMove, Just ann) = AnnotatedMove pgnMove (Annotation ann)
 
-createWhiteMoveToken :: Int -> Result -> PgnMove -> [PgnMove] -> WhiteMoveToken
-createWhiteMoveToken _ res x [] = FinalWhiteMove x (GameResult res)
-createWhiteMoveToken moveN res x (y:ys) = WhiteMove x (createBlackMoveToken moveN res y ys)
+createBlackMoveToken :: Int -> Result -> AnnotatedPgnMove -> [AnnotatedPgnMove] -> BlackMoveToken
+createBlackMoveToken _ res mv [] = FinalBlackMove (createMoveToken mv) (GameResult res)
+createBlackMoveToken moveN res mv xs = BlackMove (createMoveToken mv) (createMoveNumberToken (moveN+1) res xs)
 
-createMoveNumberToken :: Int -> Result -> [PgnMove] -> MoveNumberToken
+createWhiteMoveToken :: Int -> Result -> AnnotatedPgnMove -> [AnnotatedPgnMove] -> WhiteMoveToken
+createWhiteMoveToken _ res mv [] = FinalWhiteMove (createMoveToken mv) (GameResult res)
+createWhiteMoveToken moveN res mv (y:ys) = WhiteMove (createMoveToken mv) (createBlackMoveToken moveN res y ys)
+
+createMoveNumberToken :: Int -> Result -> [AnnotatedPgnMove] -> MoveNumberToken
 createMoveNumberToken moveN res [] = FinalMoveNumber (MN moveN) (GameResult res)
 createMoveNumberToken moveN res (x:xs) = MoveNumber (MN moveN) (createWhiteMoveToken moveN res x xs)
 
-createGameToken :: Result -> [PgnMove] -> GameToken
+createGameToken :: Result -> [AnnotatedPgnMove] -> GameToken
 createGameToken _ [] = EmptyGame
 createGameToken res xs = Game (createMoveNumberToken 1 res xs)
 
 createPgnMove :: PositionContext -> UnderspecifiedMove -> PgnMove
-createPgnMove _ (CastleMove direction) = PgnCastleMove direction
+createPgnMove _ (CastleMove direction _) = PgnCastleMove direction
 createPgnMove nextPosition unspecMove = 
     let (cm, _) = knownPiece unspecMove in
     PgnMove {
@@ -388,31 +438,26 @@ createPgnMove nextPosition unspecMove =
         pgnCheckState = getCheckState nextPosition
     }
 
-createPgnMoves :: GameContext -> Either MoveError [PgnMove]
+createAnnotatedPgnMove :: PositionContext -> UnderspecifiedMove -> AnnotatedPgnMove
+createAnnotatedPgnMove _ (CastleMove direction mAnnotation) = (PgnCastleMove direction, fmap mapMoveAnnotation mAnnotation)
+createAnnotatedPgnMove nextPosition unspecMove = (pgnMove, mAnnotation) where
+    pgnMove = createPgnMove nextPosition unspecMove
+    mAnnotation = fmap mapMoveAnnotation (knownMoveAnnotation unspecMove)
+
+createPgnMoves :: GameContext -> Either MoveError [AnnotatedPgnMove]
 createPgnMoves gc
     | null (positions gc) = return []
     | otherwise = do
         unspecMoves <- createMinimallySpecifiedMoves gc
-        -- We skip the first move because createPgnMove needs each move paired with the _next_ position,
+        -- We skip the first position because createPgnMove needs each move paired with the _next_ position,
         -- and the first position in the position list always precedes the first move in the move list.
         -- The call to tail should be safe because the list of positions should never be empty, but
         -- famous last words and all that.
-        return $ zipWith createPgnMove (tail (positions gc)) unspecMoves
+        return $ zipWith createAnnotatedPgnMove (tail (positions gc)) unspecMoves
 
 -- The PGN spec says that exported PGN strings should cut off the lines in the movetext at 80 characters.
 writeGameToken :: GameToken -> String
-writeGameToken = unlines . map unwords . cutLines 80 . map show . gameItems where
-
--- Technically this function could be defined for all lists, but the behavior only
--- truly makes sense for strings because of the +1 that's added for each item.
-cutLines :: Int -> [String] -> [[String]]
-cutLines maxLen = go 0 [] where
-    go _ acc [] = [acc]
-    go n acc (x:xs)
-        | newLen > maxLen = acc : go len [x] xs
-        | otherwise = go newLen (acc ++ [x]) xs where
-            len = length x
-            newLen = n + len + 1 -- +1 for the space that follows each item in the list.
+writeGameToken = wrapLines 80 . unwords . map show . gameItems where
 
 writeExtraHeaders :: [ExtraHeader] -> ShowS
 writeExtraHeaders [] = showString ""

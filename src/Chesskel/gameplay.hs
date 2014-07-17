@@ -98,10 +98,10 @@ startGame pc (hd, extra) = GC {
     gameResult = Ongoing
 }
 
-playMove :: Move -> Maybe PromotionTarget -> GameContext -> Either MoveError GameContext
-playMove move mpt gc = do
+playMove :: Move -> Maybe PromotionTarget -> Maybe MoveAnnotation -> GameContext -> Either MoveError GameContext
+playMove move mpt mAnnotation gc = do
     failIfGameIsFinished gc
-    (mc, pc') <- makeMove (currentPosition gc) move mpt
+    (mc, pc') <- makeMove (currentPosition gc) move mpt mAnnotation
     return $ updateGameContext mc pc' gc
 
 failIfGameIsFinished :: GameContext -> Either MoveError ()
@@ -113,10 +113,10 @@ playUnderspecifiedMove unspecMove gc = do
     return $ updateGameContext mc pc' gc
 
 playNonPromotionMove :: Move -> GameContext -> Either MoveError GameContext
-playNonPromotionMove move = playMove move Nothing
+playNonPromotionMove move = playMove move Nothing Nothing
 
 playPromotion :: Move -> PromotionTarget -> GameContext -> Either MoveError GameContext
-playPromotion move pt = playMove move (Just pt)
+playPromotion move pt = playMove move (Just pt) Nothing
 
 resign :: Color -> GameContext -> GameContext
 resign White = setResult BlackWin
