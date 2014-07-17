@@ -10,6 +10,7 @@ import Chesskel.Board
 import Control.Applicative hiding ((<|>), many)
 import Text.Parsec
 
+-- |Parses a file (a-h).
 file = cr <$> oneOf "abcdefgh" <?> "file (a-h)" where
     cr 'a' = FileA
     cr 'b' = FileB 
@@ -21,6 +22,7 @@ file = cr <$> oneOf "abcdefgh" <?> "file (a-h)" where
     cr 'h' = FileH
     cr _ = error "Should never happen. Call the police"
 
+-- |Parses a rank (1-8).
 rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
     cr '1' = Rank1
     cr '2' = Rank2 
@@ -32,4 +34,5 @@ rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
     cr '8' = Rank8
     cr _ = error "Should never happen. Call the police"
 
+-- |Parses a cell (file followed by rank).
 cell = createCell <$> file <*> rank <?> "square (a1-h8)"

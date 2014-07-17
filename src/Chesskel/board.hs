@@ -1,5 +1,6 @@
 module Chesskel.Board (
     Position,
+    PositionContext (..),
     Chessman (..),
     Color (..),
     Piece,
@@ -7,21 +8,25 @@ module Chesskel.Board (
     Rank (..),
     File (..),
     Cell (..),
+    Castling,
+    CastlingDirection (..),
     
     -- ** Position functions
     -- |Functions that create and manipulate position objects.
     
+    startPosition,
     emptyPosition,
     standardPosition,
     createPosition,
     updatePosition,
     
-    -- ** Color and cell functions
-    -- |Functions that manipulate cells and colors.
+    -- ** Assorted functions
+    -- |Functions that manipulate cells, colors and castling specifications.
     
     otherColor,
     createCell,
     allCells,
+    allCastlingRights,
     
     -- ** Piece and square functions
     -- |Functions that retrieve information about pieces and squares.
@@ -58,6 +63,7 @@ import Control.Monad
 import Data.Char
 import qualified Data.IntMap as IM
 import Data.Maybe
+import qualified Data.Set as S
 import qualified Data.Vector as V
 
 -- |A chessman is one of the six basic piece types of chess.
@@ -90,11 +96,36 @@ newtype PositionCache = PositionCache PieceMap deriving (Eq)
 -- |A position represents a single setup of pieces on the chess board.
 --  This type is not sufficient for determining the current position of a game, since it contains
 --  only the board and doesn't know anything about the current player, castling rights, etc.
---  The type that has all the remaining position information is the 'Chesskel.Movement.PositionContext'
---  type in the "Chesskel.Movement" module.
-
+--  The type that has all the remaining position information is the 'PositionContext' type.
 --  This data type is abstract. Consumers should not have to care what storage mechanism is used internally.
 newtype Position = Position (Squares, PositionCache) deriving (Eq)
+
+-- |A position context is a wrapper for the 'Position' type that contains extra information
+--  that cannot be extrapolated from the board itself. This data structure contains all the
+--  necessary information to create a FEN.
+data PositionContext = PC {
+    -- |The actual position.
+    position :: Position,
+    
+    -- |The player whose turn it is to move.
+    currentPlayer :: Color,
+    
+    -- |A set of castling rights for the two sides. Players lose all castling rights when they
+    --  move their king, and lose castling rights on one side when they move the rook on that side.
+    castlingRights :: S.Set Castling,
+    
+    -- |The previous en passant cell. When the previous move was a double pawn move, this will be the
+    --  cell that was skipped. For instance, if the previous move was white moving a pawn from d2 to d4,
+    --  this will be set to e3.
+    previousEnPassantCell :: Maybe Cell,
+    
+    -- |The number of half-moves (plies) since a pawn was pushed or a piece was captured. This number is
+    --  is used for the 50 move rule, which lets either player claim a draw when this number reaches 50.
+    halfMoveClock :: Int,
+    
+    -- |The number of full moves (one move by each player) since the beginning of the game.
+    moveCount :: Int
+} deriving (Eq)
 
 -- |The chess board is made up of eight ranks, numbered 1 through 8.
 data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 deriving (Eq, Ord, Bounded, Show)
@@ -105,6 +136,12 @@ data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH derivi
 -- |A cell represents the coordinates of one of the tiles on the chess board.
 --  It's a combination of a file and a rank, and is usually designated by names such as a1, a2, etc.
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
+
+-- |The directions in which the king can castle.
+data CastlingDirection = Kingside | Queenside deriving (Eq, Ord)
+
+-- |A full specification of a castling event requires the castling direction and the player.
+type Castling = (CastlingDirection, Color)
 
 instance Enum Rank where
     fromEnum Rank1 = 1
@@ -153,8 +190,17 @@ instance Enum Cell where
 instance Show Cell where
     show (Cell (file, rank)) = [shortFile file, shortRank rank]
 
+instance Show CastlingDirection where
+    show Kingside = "O-O"
+    show Queenside = "O-O-O"
+
 instance Show Position where
     show = unlines . map showRow . reverse . getRows
+
+instance Show PositionContext where
+    show pc = shows (position pc) ("\n" ++ showPlayerToMove pc) where
+        showPlayerToMove PC { currentPlayer = White } = "White to move"
+        showPlayerToMove PC { currentPlayer = Black } = "Black to move"
 
 -- |Gets the letter corresponding to the given file.
 shortFile :: File -> Char
@@ -209,6 +255,14 @@ otherColor Black = White
 -- |Determines whether the given piece has the given color.
 isColor :: Color -> Piece -> Bool
 isColor color (_, pieceColor) = color == pieceColor
+
+-- |A set containing all castling specifications.
+allCastlingRights :: S.Set Castling
+allCastlingRights = S.fromList [
+    (Kingside, White),
+    (Kingside, Black),
+    (Queenside, White),
+    (Queenside, Black)]
 
 -- |Gets a list of lists, where each list is a row from the standard starting position of chess.
 startRows :: [[Square]]
@@ -277,6 +331,17 @@ getPiecesFromMap = map (first toEnum) . IM.assocs
 piecesOfColor :: Color -> Position -> [(Cell, Piece)]
 piecesOfColor color (Position (_, PositionCache pieceMap)) =
     filter (isColor color . snd) $ getPiecesFromMap pieceMap
+
+-- |The standard starting position of chess.
+startPosition :: PositionContext
+startPosition = PC {
+    position = standardPosition,
+    currentPlayer = White,
+    castlingRights = allCastlingRights,
+    previousEnPassantCell = Nothing,
+    halfMoveClock = 0,
+    moveCount = 1
+}
 
 -- |Gets an empty board.
 emptyPosition :: Position

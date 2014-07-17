@@ -1,6 +1,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 module Chesskel.Formats.Pgn (
+    PgnError (..),
     readPgn,
     writePgn
 ) where
@@ -17,8 +18,12 @@ import qualified Data.Text as T
 import Text.Parsec
 import Text.Parsec.String
 
+-- |An error indicating that there's something wrong with a PGN.
 data PgnError =
+    -- |The PGN has a syntax error.
     PgnSyntaxError String |
+    
+    -- |The PGN is syntactically valid, but contains one or more invalid moves.
     InvalidMoveError String deriving (Eq, Show)
 
 type HeaderToken = (String, String)
@@ -472,11 +477,15 @@ writeGame hdata gameToken = writeAllHeaderData hdata . showString "\n" $ writeGa
 createGame :: GameContext -> Either MoveError GameToken
 createGame gc = createGameToken (gameResult gc) <$> createPgnMoves gc
 
+-- |Parses a PGN string and creates a GameContext,
+--  or returns a PgnError if the PGN is syntactically or semantically invalid.
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do
     (headerTokens, gameToken) <- mapSyntaxError (parse pgn "ReadPgn" pgnString)
     hdata <- interpretHeaders headerTokens
     interpretGame gameToken hdata
 
+-- |Writes a PGN string based on a GameContext.
+--  This function may fail because it's possible for the GameContext to be invalid.
 writePgn :: GameContext -> Either MoveError String
 writePgn gc = writeGame (allHeaderData gc) <$> createGame gc

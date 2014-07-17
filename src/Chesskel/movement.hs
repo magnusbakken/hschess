@@ -1,12 +1,9 @@
 module Chesskel.Movement (
-    Move,
+    Move (..),
     MoveContext (..),
-    PositionContext (..),
     UnderspecifiedMove (..),
     PromotionTarget (..),
-    Castling,
     CastlingData (..),
-    CastlingDirection (..),
     CheckState (..),
     MoveAnnotation (..),
     MoveError (..),
@@ -151,39 +148,6 @@ data CastlingData = CD {
     castlingSpec :: Castling
 } deriving (Eq)
 
--- |The directions in which the king can castle.
-data CastlingDirection = Kingside | Queenside deriving (Eq, Ord)
-
--- |A full specification of a castling event requires the castling direction and the player.
-type Castling = (CastlingDirection, Color)
-
--- |A position context is a wrapper for the 'Position' type that contains extra information
---  that cannot be extrapolated from the board itself. This data structure contains all the
---  necessary information to create a FEN.
-data PositionContext = PC {
-    -- |The actual position.
-    position :: Position,
-    
-    -- |The player whose turn it is to move.
-    currentPlayer :: Color,
-    
-    -- |A set of castling rights for the two sides. Players lose all castling rights when they
-    --  move their king, and lose castling rights on one side when they move the rook on that side.
-    castlingRights :: S.Set Castling,
-    
-    -- |The previous en passant cell. When the previous move was a double pawn move, this will be the
-    --  cell that was skipped. For instance, if the previous move was white moving a pawn from d2 to d4,
-    --  this will be set to e3.
-    previousEnPassantCell :: Maybe Cell,
-    
-    -- |The number of half-moves (plies) since a pawn was pushed or a piece was captured. This number is
-    --  is used for the 50 move rule, which lets either player claim a draw when this number reaches 50.
-    halfMoveClock :: Int,
-    
-    -- |The number of full moves (one move by each player) since the beginning of the game.
-    moveCount :: Int
-} deriving (Eq)
-
 -- |A check state is either a check or a checkmate. Mainly used to correctly represent moves in SAN.
 data CheckState = Check | Checkmate deriving (Eq, Show)
 
@@ -240,17 +204,8 @@ instance Enum Move where
         | n >= 0 && n < 64*64 = let (q, r) = n `quotRem` 64 in createMove (toEnum q) (toEnum r)
         | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 4095)"
 
-instance Show CastlingDirection where
-    show Kingside = "O-O"
-    show Queenside = "O-O-O"
-
 instance Show Move where
     show (Move (fromCell, toCell)) = show fromCell ++ "-" ++ show toCell
-
-instance Show PositionContext where
-    show pc = shows (position pc) ("\n" ++ showPlayerToMove pc) where
-        showPlayerToMove PC { currentPlayer = White } = "White to move"
-        showPlayerToMove PC { currentPlayer = Black } = "Black to move"
 
 instance Show MoveAnnotation where
     show (MA s) = "{" ++ T.unpack s ++ "}"
@@ -259,28 +214,9 @@ instance Show MoveAnnotation where
 allPromotionTargets :: [PromotionTarget]
 allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
 
--- |A set containing all castling specifications.
-allCastlingRights :: S.Set Castling
-allCastlingRights = S.fromList [
-    (Kingside, White),
-    (Kingside, Black),
-    (Queenside, White),
-    (Queenside, Black)]
-
 -- |Creates a move based on a source cell and a destination cell.
 createMove :: Cell -> Cell -> Move
 createMove fromCell toCell = Move (fromCell, toCell)
-
--- |The standard starting position of chess.
-startPosition :: PositionContext
-startPosition = PC {
-    position = standardPosition,
-    currentPlayer = White,
-    castlingRights = allCastlingRights,
-    previousEnPassantCell = Nothing,
-    halfMoveClock = 0,
-    moveCount = 1
-}
 
 -- |Gets the appropriate piece for the given promotion target and color.
 getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece

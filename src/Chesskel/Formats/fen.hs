@@ -1,12 +1,12 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 module Chesskel.Formats.Fen (
+    FenError (..),
     readFen,
     writeFen
 ) where
 
 import Chesskel.Board
-import Chesskel.Movement
 import Chesskel.Formats.Common
 import Control.Applicative hiding ((<|>), many)
 import Data.Char
@@ -18,8 +18,13 @@ import Text.Parsec
 import Text.Parsec.Token hiding (squares)
 import Text.Parsec.Language (haskell)
 
+-- |An error indicating that there's something wrong with a FEN.
 data FenError =
+    -- |The FEN has a syntax error.
     FenSyntaxError String |
+    
+    -- |The FEN is syntactically valid, but has an incorrect board description
+    --  where at least one row has too many or too few cells.
     FenPositionError String deriving (Eq, Show)
 
 data FenToken = Fen {
@@ -189,9 +194,6 @@ mapSyntaxError :: Either ParseError a -> Either FenError a
 mapSyntaxError (Left e) = Left $ FenSyntaxError (show e)
 mapSyntaxError (Right a) = Right a
 
-readFen :: String -> Either FenError PositionContext
-readFen s = mapSyntaxError (parse fen "ParseFen" s) >>= interpretFen
-
 collapseRow :: [Square] -> RowToken
 collapseRow = ungroup . L.group where
     ungroup [] = []
@@ -256,5 +258,12 @@ showSyntaxTree fenToken = unwords [
     showHalfMoveClock (halfMoveClockToken fenToken),
     showFullMoveNumber (fullMoveNumberToken fenToken)]
 
+-- |Parses a FEN string and creates a PositionContext,
+--  or returns a FenError if the FEN is syntactically or semantically invalid.
+readFen :: String -> Either FenError PositionContext
+readFen s = mapSyntaxError (parse fen "ParseFen" s) >>= interpretFen
+
+-- |Writes a FEN string based on a PositionContext.
+--  Unlike 'readFen', this function should never fail.
 writeFen :: PositionContext -> String
 writeFen = showSyntaxTree . createSyntaxTree
