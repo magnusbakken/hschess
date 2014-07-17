@@ -1,26 +1,48 @@
 module Chesskel.Board (
-    Piece,
+    Position,
     Chessman (..),
     Color (..),
+    Piece,
     Square,
     Rank (..),
     File (..),
     Cell (..),
-    Position,
-    pieceToChar,
-    otherColor,
-    createCell,
-    piecesOfColor,
-    getRows,
-    allCells,
-    getSquare,
-    hasPiece,
-    hasPieceOfType,
-    hasPieceOfColor,
+    
+    -- ** Position functions
+    -- |Functions that create and manipulate position objects.
+    
     emptyPosition,
     standardPosition,
     createPosition,
     updatePosition,
+    
+    -- ** Color and cell functions
+    -- |Functions that manipulate cells and colors.
+    
+    otherColor,
+    createCell,
+    allCells,
+    
+    -- ** Piece and square functions
+    -- |Functions that retrieve information about pieces and squares.
+    
+    hasPiece,
+    hasPieceOfType,
+    hasPieceOfColor,
+    piecesOfColor,
+    getSquare,
+    getRows,
+    pieceToChar,
+    
+    -- ** Cell literals
+    -- |These cell literals are provided for testing and debugging purposes.
+    --  It's quite useful to be able to use these to test ad-hoc moves and games:
+    --
+    --  >>> playNonPromotionMove (createMove e2 e4) startStandardGame
+    --
+    --  However, if they turn out to be too much a nuisance on account of having simple names that
+    --  may clash with many other variables and functions, they may be moved to a separate module.
+    
     a1, b1, c1, d1, e1, f1, g1, h1,
     a2, b2, c2, d2, e2, f2, g2, h2,
     a3, b3, c3, d3, e3, f3, g3, h3,
@@ -38,17 +60,50 @@ import qualified Data.IntMap as IM
 import Data.Maybe
 import qualified Data.Vector as V
 
+-- |A chessman is one of the six basic piece types of chess.
 data Chessman = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
+
+-- |Each color represents one of the two players.
+--  Note! It may seem surprising that Color is part of the 'Ord' class, with White < Black.
+--  The reason is that the IntMap data structure is currently used internally, and it
+--  requires the data you put in it to be ordered. The Ord instance for Color should not be
+--  relied upon, and may be removed in the future.
 data Color = White | Black deriving (Eq, Ord, Show)
+
+-- |A piece is a combination of a chessman and a color.
 type Piece = (Chessman, Color)
+
+-- |A square is either a piece or Nothing.
+--  Squares don't know where they are on the board. To identify board coordinates you need to use the Cell type.
 type Square = Maybe Piece
+
+-- |A vector of squares, currently used as the internal storage mechanism.
 type Squares = V.Vector Square
+
+-- |A piece map, used for caching of piece locations.
 type PieceMap = IM.IntMap Piece
+
+-- |A cache data structure used for the position type.
+--  This is an implementation detail, and may be changed or removed in the future.
 newtype PositionCache = PositionCache PieceMap deriving (Eq)
+
+-- |A position represents a single setup of pieces on the chess board.
+--  This type is not sufficient for determining the current position of a game, since it contains
+--  only the board and doesn't know anything about the current player, castling rights, etc.
+--  The type that has all the remaining position information is the 'Chesskel.Movement.PositionContext'
+--  type in the "Chesskel.Movement" module.
+
+--  This data type is abstract. Consumers should not have to care what storage mechanism is used internally.
 newtype Position = Position (Squares, PositionCache) deriving (Eq)
 
+-- |The chess board is made up of eight ranks, numbered 1 through 8.
 data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 deriving (Eq, Ord, Bounded, Show)
+
+-- |The chess board is made up of eight files, labeled a through h.
 data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH deriving (Eq, Ord, Bounded, Show)
+
+-- |A cell represents the coordinates of one of the tiles on the chess board.
+--  It's a combination of a file and a rank, and is usually designated by names such as a1, a2, etc.
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
 
 instance Enum Rank where
@@ -100,6 +155,161 @@ instance Show Cell where
 
 instance Show Position where
     show = unlines . map showRow . reverse . getRows
+
+-- |Gets the letter corresponding to the given file.
+shortFile :: File -> Char
+shortFile FileA = 'a'
+shortFile FileB = 'b'
+shortFile FileC = 'c'
+shortFile FileD = 'd'
+shortFile FileE = 'e'
+shortFile FileF = 'f'
+shortFile FileG = 'g'
+shortFile FileH = 'h'
+
+-- |Gets the number corresponding to the given rank.
+shortRank :: Rank -> Char
+shortRank Rank1 = '1'
+shortRank Rank2 = '2'
+shortRank Rank3 = '3'
+shortRank Rank4 = '4'
+shortRank Rank5 = '5'
+shortRank Rank6 = '6'
+shortRank Rank7 = '7'
+shortRank Rank8 = '8'
+
+-- |Gets the letter corresponding to the given piece.
+--  This is used for the Show instance of the Position type.
+pieceToChar :: Piece -> Char
+pieceToChar (Pawn, color) = colorize 'P' color
+pieceToChar (Knight, color) = colorize 'N' color
+pieceToChar (Bishop, color) = colorize 'B' color
+pieceToChar (Rook, color) = colorize 'R' color
+pieceToChar (Queen, color) = colorize 'Q' color
+pieceToChar (King, color) = colorize 'K' color
+
+-- |Make the given character lowercase if the given color is black.
+colorize :: Char -> Color -> Char
+colorize c color = if color == Black then toLower c else c
+
+-- |Shows a single square.
+showSquare :: Square -> String
+showSquare Nothing = " "
+showSquare (Just piece) = [pieceToChar piece]
+
+-- |Shows a row of squares.
+showRow :: [Square] -> String
+showRow = unwords . map showSquare
+
+-- |The opposite color of the given one.
+otherColor :: Color -> Color
+otherColor White = Black
+otherColor Black = White
+
+-- |Determines whether the given piece has the given color.
+isColor :: Color -> Piece -> Bool
+isColor color (_, pieceColor) = color == pieceColor
+
+-- |Gets a list of lists, where each list is a row from the standard starting position of chess.
+startRows :: [[Square]]
+startRows = [backRow White, pawnRow White, emptyRow, emptyRow, emptyRow, emptyRow, pawnRow Black, backRow Black]
+
+-- |Gets the back row setup for the standard starting position of chess.
+backRow :: Color -> [Square]
+backRow color = map (\chessman -> Just (chessman, color)) [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+
+-- |Gets a row full of pawns.
+pawnRow :: Color -> [Square]
+pawnRow color = replicate 8 $ Just (Pawn, color)
+
+-- |Gets an empty row.
+emptyRow :: [Square]
+emptyRow = replicate 8 Nothing
+
+-- |Gets a list of rows (list of squares) for the given position.
+getRows :: Position -> [[Square]]
+getRows (Position (vector, _)) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
+
+-- |Creates a cell based on a file and rank.
+createCell :: File -> Rank -> Cell
+createCell = curry Cell
+
+-- |Gets a sorted list containing all cells.
+allCells :: [Cell]
+allCells = enumFromTo minBound maxBound
+
+-- |Gets the square at the given cell in a given position.
+getSquare :: Position -> Cell -> Square
+getSquare (Position (vector, _)) cell = vector V.! fromEnum cell
+
+-- |Determines whether there's a piece at the given cell in the given position.
+hasPiece :: Position -> Cell -> Bool
+hasPiece (Position (_, PositionCache pieceMap)) cell = fromEnum cell `IM.member` pieceMap
+
+-- |Determines whether there's a piece of the given type at the given cell in the given position.
+hasPieceOfType :: Piece -> Position -> Cell -> Bool
+hasPieceOfType piece = hasPieceBy (== piece)
+
+-- |Determines whether there's a piece of the given color at the given cell in the given position.
+hasPieceOfColor :: Color -> Position -> Cell -> Bool
+hasPieceOfColor color = hasPieceBy (isColor color)
+
+-- |Applies a custom predicate to the piece at the given cell in the given position.
+hasPieceBy :: (Piece -> Bool) -> Position -> Cell -> Bool
+hasPieceBy predicate pos cell = maybe False predicate (getSquare pos cell)
+
+-- |Gets a list of pieces and their integer indices in the piece IntMap from the given squares.
+piecesOnly :: [Square] -> [(Int, Piece)]
+piecesOnly squares = do
+    (idx, square) <- zip [0..] squares
+    guard $ isJust square
+    return (idx, fromJust square)
+
+-- |Makes a new piece IntMap based on the pieces in the given list of squares.
+makePieceMap :: [Square] -> PieceMap
+makePieceMap = IM.fromList . piecesOnly
+
+-- |Gets a list of all pieces and their positions from the piece IntMap.
+getPiecesFromMap :: PieceMap -> [(Cell, Piece)]
+getPiecesFromMap = map (first toEnum) . IM.assocs
+
+-- |Gets all pieces of the given color in the given position, as well as their locations.
+piecesOfColor :: Color -> Position -> [(Cell, Piece)]
+piecesOfColor color (Position (_, PositionCache pieceMap)) =
+    filter (isColor color . snd) $ getPiecesFromMap pieceMap
+
+-- |Gets an empty board.
+emptyPosition :: Position
+emptyPosition = createPosition $ repeat Nothing
+
+-- |Gets a board with the standard starting position of chess.
+standardPosition :: Position
+standardPosition = createPosition $ concat startRows
+
+-- |Creates a new position based on the given list of squares.
+--  Behavior is undefined if the list doesn't have precisely 64 items in it.
+createPosition :: [Square] -> Position
+createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
+
+-- |Creates a position cache based on the given list of squares.
+createPositionCache :: [Square] -> PositionCache
+createPositionCache = PositionCache . makePieceMap
+
+-- |Updates the given position with a list of changes. Each update indicates what cell to change,
+--  and whether to put a piece there, or to vacate the cell if the value is Nothing.
+updatePosition :: Position -> [(Cell, Square)] -> Position
+updatePosition (Position (board, cache)) updates =
+    Position (updateBoard board updates, updatePositionCache cache updates)
+
+-- |Updates all cells in the square vector. This is an O(n+m) operation.
+updateBoard :: V.Vector Square -> [(Cell, Square)] -> V.Vector Square
+updateBoard vector updates = vector V.// map (first fromEnum) updates
+
+-- |Updates the position cache with the given updates.
+updatePositionCache :: PositionCache -> [(Cell, Square)] -> PositionCache
+updatePositionCache = foldl alterPositionCache where
+    alterPositionCache (PositionCache pieceMap) (cell, square) =
+        PositionCache $ IM.alter (const square) (fromEnum cell) pieceMap
 
 a1, b1, c1, d1, e1, f1, g1, h1 :: Cell
 a2, b2, c2, d2, e2, f2, g2, h2 :: Cell
@@ -173,124 +383,3 @@ e8 = Cell (FileE, Rank8)
 f8 = Cell (FileF, Rank8)
 g8 = Cell (FileG, Rank8)
 h8 = Cell (FileH, Rank8)
-
-otherColor :: Color -> Color
-otherColor White = Black
-otherColor Black = White
-
-isColor :: Color -> Piece -> Bool
-isColor color (_, pieceColor) = color == pieceColor
-
-shortFile :: File -> Char
-shortFile FileA = 'a'
-shortFile FileB = 'b'
-shortFile FileC = 'c'
-shortFile FileD = 'd'
-shortFile FileE = 'e'
-shortFile FileF = 'f'
-shortFile FileG = 'g'
-shortFile FileH = 'h'
-
-shortRank :: Rank -> Char
-shortRank Rank1 = '1'
-shortRank Rank2 = '2'
-shortRank Rank3 = '3'
-shortRank Rank4 = '4'
-shortRank Rank5 = '5'
-shortRank Rank6 = '6'
-shortRank Rank7 = '7'
-shortRank Rank8 = '8'
-
-pieceToChar :: Piece -> Char
-pieceToChar (Pawn, color) = colorize 'P' color
-pieceToChar (Knight, color) = colorize 'N' color
-pieceToChar (Bishop, color) = colorize 'B' color
-pieceToChar (Rook, color) = colorize 'R' color
-pieceToChar (Queen, color) = colorize 'Q' color
-pieceToChar (King, color) = colorize 'K' color
-
-colorize :: Char -> Color -> Char
-colorize c color = if color == Black then toLower c else c
-
-showSquare :: Square -> String
-showSquare Nothing = " "
-showSquare (Just piece) = [pieceToChar piece]
-
-showRow :: [Square] -> String
-showRow = unwords . map showSquare
-
-startRows :: [[Square]]
-startRows = [backRow White, pawnRow White, emptyRow, emptyRow, emptyRow, emptyRow, pawnRow Black, backRow Black]
-
-backRow :: Color -> [Square]
-backRow color = map (\chessman -> Just (chessman, color)) [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
-
-pawnRow :: Color -> [Square]
-pawnRow color = replicate 8 $ Just (Pawn, color)
-
-emptyRow :: [Square]
-emptyRow = replicate 8 Nothing
-
-getRows :: Position -> [[Square]]
-getRows (Position (vector, _)) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
-
-createCell :: File -> Rank -> Cell
-createCell file rank = Cell (file, rank)
-
-allCells :: [Cell]
-allCells = enumFromTo minBound maxBound
-
-getSquare :: Position -> Cell -> Square
-getSquare (Position (vector, _)) cell = vector V.! fromEnum cell
-
-hasPiece :: Position -> Cell -> Bool
-hasPiece (Position (_, PositionCache pieceMap)) cell = fromEnum cell `IM.member` pieceMap
-
-hasPieceOfType :: Piece -> Position -> Cell -> Bool
-hasPieceOfType piece = hasPieceBy (== piece)
-
-hasPieceOfColor :: Color -> Position -> Cell -> Bool
-hasPieceOfColor color = hasPieceBy (isColor color)
-
-hasPieceBy :: (Piece -> Bool) -> Position -> Cell -> Bool
-hasPieceBy predicate pos cell = maybe False predicate (getSquare pos cell)
-
-piecesOnly :: [Square] -> [(Int, Piece)]
-piecesOnly squares = do
-    (idx, square) <- zip [0..] squares
-    guard $ isJust square
-    return (idx, fromJust square)
-
-makePieceMap :: [Square] -> PieceMap
-makePieceMap = IM.fromList . piecesOnly
-
-getPiecesFromMap :: PieceMap -> [(Cell, Piece)]
-getPiecesFromMap = map (first toEnum) . IM.assocs
-
-piecesOfColor :: Color -> Position -> [(Cell, Piece)]
-piecesOfColor color (Position (_, PositionCache pieceMap)) =
-    filter (isColor color . snd) $ getPiecesFromMap pieceMap
-
-emptyPosition :: Position
-emptyPosition = createPosition $ repeat Nothing
-
-standardPosition :: Position
-standardPosition = createPosition $ concat startRows
-
-createPosition :: [Square] -> Position
-createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
-
-createPositionCache :: [Square] -> PositionCache
-createPositionCache = PositionCache . makePieceMap
-
-updatePosition :: Position -> [(Cell, Square)] -> Position
-updatePosition (Position (board, cache)) updates =
-    Position (updateBoard board updates, updatePositionCache cache updates)
-
-updateBoard :: V.Vector Square -> [(Cell, Square)] -> V.Vector Square
-updateBoard vector updates = vector V.// map (first fromEnum) updates
-
-updatePositionCache :: PositionCache -> [(Cell, Square)] -> PositionCache
-updatePositionCache = foldl alterPositionCache where
-    alterPositionCache (PositionCache pieceMap) (cell, square) =
-        PositionCache $ IM.alter (const square) (fromEnum cell) pieceMap

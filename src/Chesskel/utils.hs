@@ -1,7 +1,8 @@
 module Chesskel.Utils (
     wrapLines,
     maybeToEither,
-    isRight
+    isRight,
+    interpolate
 ) where
 
 import Data.Char (isSpace)
@@ -33,3 +34,9 @@ maybeToEither e = maybe (Left e) Right
 isRight :: Either e a -> Bool -- Added to Data.Either in recent GHC version.
 isRight (Right _) = True
 isRight (Left _) = False
+
+interpolate :: (Enum n, Ord n) => n -> n -> [n]
+interpolate from to
+    | from == to = []
+    | from > to = reverse (interpolate to from)
+    | otherwise = [succ from..pred to]
