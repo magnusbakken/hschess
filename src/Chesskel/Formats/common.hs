@@ -1,5 +1,18 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
+
+{-|
+Module      : Chesskel.Formats.Common
+Description : Parsec parsing functions for cells and SAN moves.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions for parsing individual files, ranks, cells and
+SAN moves. These functions are reused for multiple formats.
+-}
 module Chesskel.Formats.Common (
     file,
     rank,

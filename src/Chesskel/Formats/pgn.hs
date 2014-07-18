@@ -1,5 +1,18 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
+
+{-|
+Module      : Chesskel.Formats.Pgn
+Description : Utilities for reading and writing PGN strings.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions for reading and writing chess games in the PGN
+(Portable Game Notation) format.
+-}
 module Chesskel.Formats.Pgn (
     PgnError (..),
     readPgn,
@@ -271,6 +284,8 @@ createGame gc = createGameToken (gameResult gc) <$> createMinimalMoves gc
 
 -- |Parses a PGN string and creates a GameContext,
 --  or returns a PgnError if the PGN is syntactically or semantically invalid.
+--
+--  Currently there's support for reading comments, but not NAGs (Numeric Annotation Glyphs).
 readPgn :: String -> Either PgnError GameContext
 readPgn pgnString = do
     (headerTokens, gameToken) <- mapSyntaxError (parse pgn "ReadPgn" pgnString)

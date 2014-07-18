@@ -1,3 +1,15 @@
+{-|
+Module      : Chesskel.Utils
+Description : Internal generic utility functions for the Chesskel API.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This internal module contains utility functions that are fairly generic but
+that the author hasn't found in any readily available packages.
+-}
 module Chesskel.Utils (
     wrapLines,
     maybeToEither,

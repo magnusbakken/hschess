@@ -1,5 +1,18 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
+
+{-|
+Module      : Chesskel.Formats.San
+Description : Utilities for reading and writing SAN strings.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions for reading and writing chess moves in the SAN
+(Standard Algebraic Notation) format.
+-}
 module Chesskel.Formats.San (
     SanMoveError (..),
     readSanMove,

@@ -1,3 +1,17 @@
+{-|
+Module      : Chesskel
+Description : External chess format API.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module combines the modules for all supported chess interchange formats.
+Currently this includes the PGN (Portable Game Notation) full game format, the
+FEN (Forsyth-Edwards Notation) single position format, and the SAN (Standard
+Algebraic Notation) move format.
+-}
 module Chesskel.Formats (
     -- |The "Chesskel.Formats.Fen" module contains functions for reading and writing FEN (Forsyth–Edwards Notation) strings.
     module Chesskel.Formats.Fen,

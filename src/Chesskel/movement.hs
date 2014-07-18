@@ -1,3 +1,18 @@
+{-|
+Module      : Chesskel.Board
+Description : Functions for chess positions, pieces and cells.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions related to moves, including promotions and move
+errors. There are multiple move data models used for different purposes. If you
+only want to analyze moves for specific positions, independent of their context
+within a game, you can stick to this module. If you need to deal with entire
+chess games, you have to consider the "Chesskel.Gameplay" module as well.
+-}
 module Chesskel.Movement (
     Move (..),
     MoveContext (..),

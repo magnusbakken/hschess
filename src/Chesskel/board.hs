@@ -1,3 +1,18 @@
+{-|
+Module      : Chesskel.Board
+Description : Functions for chess positions, pieces and cells.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions related to chess positions, pieces and cells.
+Basically everything that's \"static\", with no implication of movement,
+is placed in this model. (The 'Castling' type could be seen as an exception to
+this. It's kept in this module because of the need for keeping track of castling
+rights.)
+-}
 module Chesskel.Board (
     Position,
     PositionContext (..),

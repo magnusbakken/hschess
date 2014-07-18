@@ -1,3 +1,17 @@
+{-|
+Module      : Chesskel.Board
+Description : Functions for entire chess games.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions related to complete chess games. This includes
+both the move and position history of the game, and also metadata such as the
+names of the players. If you only need to consider individual positions and
+moves you can concentrate on the "Chesskel.Movement" module instead.
+-}
 module Chesskel.Gameplay (
     GameContext (..),
     HeaderData (..),

@@ -1,3 +1,17 @@
+{-|
+Module      : Chesskel
+Description : A chess API.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module combines the modules for positions ("Chesskel.Board"), moves
+("Chesskel.Movement") and games ("Chesskel.Gameplay"). If you only need parts
+of the functionality, consider importing those modules separately as needed
+instead.
+-}
 module Chesskel (
     -- |The "Chesskel.Board" module contains basic data types and functions for positions, cells, pieces, etc.
     module Chesskel.Board,

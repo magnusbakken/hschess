@@ -1,5 +1,18 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
+
+{-|
+Module      : Chesskel.Formats.Fen
+Description : Utilities for reading and writing FEN strings.
+Copyright   : © Magnus Grindal Bakken, 2014
+License     : MIT
+Maintainer  : magnusbakken@gmail.com
+Stability   : experimental
+Portability : POSIX
+
+This module contains functions for reading and writing chess positions in the FEN
+(Forsyth-Edwards Notation) format.
+-}
 module Chesskel.Formats.Fen (
     FenError (..),
     readFen,
