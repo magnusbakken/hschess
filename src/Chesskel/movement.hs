@@ -265,10 +265,6 @@ instance Show UnderspecifiedMove where
 allPromotionTargets :: [PromotionTarget]
 allPromotionTargets = [PKnight, PBishop, PRook, PQueen]
 
--- |Creates a move based on a source cell and a destination cell.
-createMove :: Cell -> Cell -> Move
-createMove fromCell toCell = Move (fromCell, toCell)
-
 -- |Gets the appropriate piece for the given promotion target and color.
 getPieceForPromotionTarget :: Color -> PromotionTarget -> Piece
 getPieceForPromotionTarget color PKnight = (Knight, color)
@@ -622,7 +618,7 @@ pawnCanReach color pos move =
 
 -- |Determines whether the given move is valid as a regular pawn move.
 --
---  The move must travel one cell ahead vertically.
+--  The pawn must travel one cell ahead vertically.
 isValidRegularPawnMove :: Color -> Position -> Move -> Bool
 isValidRegularPawnMove color pos (Move (Cell (fromFile, fromRank), Cell (toFile, toRank))) =
     -- If there's somehow a pawn on the first/last rank we want to return false in all cases.
@@ -637,7 +633,7 @@ isValidRegularPawnMove color pos (Move (Cell (fromFile, fromRank), Cell (toFile,
 
 -- |Determines whether the given move is valid as a double pawn move.
 --
---  The move must travel two cells ahead vertically when starting from the second rank if white,
+--  The pawn must travel two cells ahead vertically when starting from the second rank if white,
 --  or the seventh rank if black.
 isValidDoublePawnMove :: Color -> Position -> Move -> Bool
 isValidDoublePawnMove color pos (Move (Cell (fromFile, fromRank), Cell (toFile, toRank))) =
@@ -652,28 +648,28 @@ isValidDoublePawnMove color pos (Move (Cell (fromFile, fromRank), Cell (toFile, 
 
 -- |Determines whether the given move is valid as a pawn capture.
 --
---  The move must travel one cell ahead vertically and move one file to either side,
+--  The pawn must travel one cell ahead vertically and move one file to either side,
 --  and the destination cell must contain a piece of the opposite color.
 isValidPawnCapture :: Color -> Position -> Move -> Bool
 isValidPawnCapture color pos (Move (fromCell, toCell)) =
-    isValidPawnCapture' color (createMove fromCell toCell) &&
+    isValidPawnCaptureMove color (createMove fromCell toCell) &&
     hasPieceOfColor (otherColor color) pos toCell
 
 -- |Determines whether the given move is valid as an en passant pawn capture.
 --
---  The move must travel one cell ahead vertically and move one file to either side,
+--  The pawn must travel one cell ahead vertically and move one file to either side,
 --  and the destination cell must be the previous en passant cell of the position context.
 isValidEnPassantCapture :: PositionContext -> Move -> Bool
 isValidEnPassantCapture pc (Move (fromCell, toCell)) =
     previousEnPassantCell pc == Just toCell &&
-    isValidPawnCapture' (currentPlayer pc) (createMove fromCell toCell)
+    isValidPawnCaptureMove (currentPlayer pc) (createMove fromCell toCell)
 
 -- |Determines whether the given move is valid as a pawn capture, without considering
 --  whether there's an enemy piece at the destination square.
 --
---  The move must travel one cell ahead vertically and move one file to either side.
-isValidPawnCapture' :: Color -> Move -> Bool
-isValidPawnCapture' color (Move (Cell (fromFile, fromRank), Cell (toFile, toRank))) =
+--  The pawn must travel one cell ahead vertically and move one file to either side.
+isValidPawnCaptureMove :: Color -> Move -> Bool
+isValidPawnCaptureMove color (Move (Cell (fromFile, fromRank), Cell (toFile, toRank))) =
     -- If there's somehow a pawn on the first/last rank we want to return false in all cases.
     -- The pred and succ functions will yield an error in such cases.
     fromRank `notElem` [Rank1, Rank8] &&
@@ -831,6 +827,10 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
     guard $ hasPieceOfType piece (position pc) fromCell
     return fromCell
 
+-- |Creates a move based on a source cell and a destination cell.
+createMove :: Cell -> Cell -> Move
+createMove fromCell toCell = Move (fromCell, toCell)
+
 -- |Creates a minimally specified move based on the given move and position.
 --
 --  The source file and rank will only be set if it's necessary due to ambiguity.
@@ -864,10 +864,9 @@ createMinimalMove pc mc =
 --
 --  We disambiguate by file iff the piece is a pawn and the move is a capture, and never disambiguate by rank.
 resolveSimpleDisambiguation :: Cell -> Cell -> Chessman -> Bool -> Maybe PromotionTarget -> Maybe CheckState -> Maybe MoveAnnotation -> MinimalMove
-resolveSimpleDisambiguation (Cell (fromFile, _)) toCell Pawn True mpt mCheckState mAnnotation =
-    (UM toCell Pawn (Just fromFile) Nothing True mpt mCheckState, mAnnotation)
-resolveSimpleDisambiguation _ toCell chessman isCap mpt mCheckState mAnnotation =
-    (UM toCell chessman Nothing Nothing isCap mpt mCheckState, mAnnotation)
+resolveSimpleDisambiguation (Cell (fromFile, _)) toCell chessman isCap mpt mCheckState mAnnotation =
+    let mFromFile = if chessman == Pawn && isCap then Just fromFile else Nothing in
+    (UM toCell chessman mFromFile Nothing isCap mpt mCheckState, mAnnotation)
 
 -- |Resolves disambiguation for a move where we have multiple candidate source cells.
 --

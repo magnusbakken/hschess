@@ -14,6 +14,7 @@ stability:           alpha
 cabal-version:       >=1.8
 data-files:
   pgn/kasparov-topalov-1999.pgn
+  pgn/nn-stamma-1737.pgn
 library
   hs-source-dirs:    src/
   ghc-options:       -O -Wall
