@@ -267,7 +267,7 @@ writeGame :: AllHeaderData -> GameToken -> String
 writeGame hdata gameToken = writeAllHeaderData hdata . showString "\n" $ writeGameToken gameToken
 
 createGame :: GameContext -> Either MoveError GameToken
-createGame gc = createGameToken (gameResult gc) <$> createMinimallySpecifiedMoves gc
+createGame gc = createGameToken (gameResult gc) <$> createMinimalMoves gc
 
 -- |Parses a PGN string and creates a GameContext,
 --  or returns a PgnError if the PGN is syntactically or semantically invalid.

@@ -9,11 +9,6 @@ module Chesskel.Movement (
     MoveAnnotation (..),
     MoveError (..),
     
-    -- ** Creating positions
-    -- |Functions that create positions.
-    
-    startPosition,
-    
     -- ** Move functions
     -- |Functions that change the position on the board by playing a move.
     
@@ -41,7 +36,7 @@ module Chesskel.Movement (
     -- |Functions that don't fit into any of the above categories.
     
     createMove,
-    createMinimallySpecifiedMove,
+    createMinimalMove,
 ) where
 
 import Chesskel.Board
@@ -760,7 +755,7 @@ hasNoMoves = null . findAllLegalMoves
 
 -- |Gets a check state for the given position.
 --
---  Returns Checkmate if the king is checkmated, Check if the king is in check but there
+--  Returns 'Checkmate' if the king is checkmated, 'Check' if the king is in check but there
 --  are available moves, and otherwise Nothing.
 getCheckState :: PositionContext -> Maybe CheckState
 getCheckState pc
@@ -841,10 +836,10 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
 --  The source file and rank will only be set if it's necessary due to ambiguity.
 --
 --  This function may give a MoveError because there's a chance that the game is invalid.
-createMinimallySpecifiedMove :: PositionContext -> MoveContext -> Either MoveError MinimalMove
-createMinimallySpecifiedMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
+createMinimalMove :: PositionContext -> MoveContext -> Either MoveError MinimalMove
+createMinimalMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
     Right (CastleMove direction, mAnnotation)
-createMinimallySpecifiedMove pc mc =
+createMinimalMove pc mc =
     -- Find candidates when we only specify the destination and the piece.
     -- If there's only a single result we don't need any disambiguation.
     -- If we get multiple results we have to disambiguate by file and/or rank.
@@ -960,7 +955,7 @@ makePromotion pc move pt = makeMove pc move (Just pt) Nothing
 --
 --  In addition to all the regular MoveError types, this may additionally return the
 --  'InsufficientDisambiguation' error type, indicating that the move is valid but there are multiple
---  candidates for the move.
+--  candidates pieces that can make the move, and it's impossible to tell which one to use.
 makeMinimalMove :: PositionContext -> MinimalMove -> Either MoveError (MoveContext, PositionContext)
 makeMinimalMove pc (CastleMove direction, mAnnotation) =
     makeMove pc (kingCastlingMove (direction, currentPlayer pc)) Nothing mAnnotation

@@ -35,7 +35,7 @@ module Chesskel.Gameplay (
     -- ** Other
     -- |Functions that don't fit into any of the above categories.
     
-    createMinimallySpecifiedMoves
+    createMinimalMoves
 ) where
 
 import Chesskel.Board
@@ -240,12 +240,14 @@ setResult result gc = gc {
     gameResult = result
 }
 
--- |Creates a list of underspecified moves, each of which has the minimum amount of
+-- |Creates a list of minimally specified moves, each of which has the minimum amount of
 --  disambiguation needed, for the given game.
 --
 --  This may return a MoveError because the game could potentially be in an invalid state.
-createMinimallySpecifiedMoves :: GameContext -> Either MoveError [MinimalMove]
-createMinimallySpecifiedMoves gc = zipWithM createMinimallySpecifiedMove (positions gc) (moves gc)
+--
+-- Refer to 'Chesskel.Movement.createMinimalMove' for more details.
+createMinimalMoves :: GameContext -> Either MoveError [MinimalMove]
+createMinimalMoves gc = zipWithM createMinimalMove (positions gc) (moves gc)
 
 -- |Updates the given game with a new move, and the new position that will arise after
 --  the move has been played. Also updates the result if the position is a checkmate or
