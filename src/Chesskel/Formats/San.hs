@@ -26,7 +26,7 @@ import Text.Parsec
 -- | An error indicating that there's something wrong with a SAN move.
 data SanMoveError =
     -- |The SAN move has a syntax error. Currently this is the only type of error for SAN moves.
-    SanMoveSyntaxError String deriving (Eq)
+    SanMoveSyntaxError String deriving (Eq, Show)
 
 mapSanMoveError :: Either ParseError a -> Either SanMoveError a
 mapSanMoveError (Right a) = Right a

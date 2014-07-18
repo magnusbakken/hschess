@@ -204,7 +204,7 @@ startGame pc (hd, extra) = GC {
 --  allowed based on the specific MoveError.
 playMove :: Move -> Maybe PromotionTarget -> Maybe MoveAnnotation -> GameContext -> Either MoveError GameContext
 playMove move mpt mAnnotation gc = do
-    if gameResult gc == Ongoing then return () else Left GameIsFinished
+    unless (gameResult gc == Ongoing) $ Left GameIsFinished
     (mc, pc') <- makeMove (currentPosition gc) move mpt mAnnotation
     return $ updateGameContext mc pc' gc where
 

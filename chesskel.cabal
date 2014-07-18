@@ -15,7 +15,7 @@ cabal-version:       >=1.8
 data-files:
   pgn/*.pgn
 library
-  hs-source-dirs:    src/
+  hs-source-dirs:    src/, tests/
   ghc-options:       -O -Wall -fwarn-incomplete-patterns
   exposed-modules:
     Chesskel
@@ -37,4 +37,16 @@ library
     , parsec     == 3.1.*
     , text       == 0.11.*
     , vector     == 0.10.*
-  
+test-suite chesskel-tests
+  hs-source-dirs:   tests/
+  ghc-options:      -Wall
+  main-is:          Test.hs
+  type:             exitcode-stdio-1.0
+  other-modules:
+    Test.Chesskel.Formats.Fen
+  build-depends:
+      base                 == 4.6.*
+    , chesskel             == 0.1.0.0
+    , HUnit                == 1.2.*
+    , test-framework       == 0.8.*
+    , test-framework-hunit == 0.3.*
