@@ -1,7 +1,7 @@
 {-|
 Module      : Chesskel.Board
 Description : Functions for entire chess games.
-Copyright   : © Magnus Grindal Bakken, 2014
+Copyright   : (c) Magnus Grindal Bakken, 2014
 License     : MIT
 Maintainer  : magnusbakken@gmail.com
 Stability   : experimental

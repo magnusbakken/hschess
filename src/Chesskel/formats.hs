@@ -1,7 +1,7 @@
 {-|
 Module      : Chesskel
 Description : External chess format API.
-Copyright   : © Magnus Grindal Bakken, 2014
+Copyright   : (c) Magnus Grindal Bakken, 2014
 License     : MIT
 Maintainer  : magnusbakken@gmail.com
 Stability   : experimental

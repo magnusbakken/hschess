@@ -4,7 +4,7 @@
 {-|
 Module      : Chesskel.Formats.Common
 Description : Parsec parsing functions for cells and SAN moves.
-Copyright   : © Magnus Grindal Bakken, 2014
+Copyright   : (c) Magnus Grindal Bakken, 2014
 License     : MIT
 Maintainer  : magnusbakken@gmail.com
 Stability   : experimental

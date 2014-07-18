@@ -4,7 +4,7 @@
 {-|
 Module      : Chesskel.Formats.Fen
 Description : Utilities for reading and writing FEN strings.
-Copyright   : © Magnus Grindal Bakken, 2014
+Copyright   : (c) Magnus Grindal Bakken, 2014
 License     : MIT
 Maintainer  : magnusbakken@gmail.com
 Stability   : experimental

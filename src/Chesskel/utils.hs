@@ -1,7 +1,7 @@
 {-|
 Module      : Chesskel.Utils
 Description : Internal generic utility functions for the Chesskel API.
-Copyright   : © Magnus Grindal Bakken, 2014
+Copyright   : (c) Magnus Grindal Bakken, 2014
 License     : MIT
 Maintainer  : magnusbakken@gmail.com
 Stability   : experimental
