@@ -2,6 +2,7 @@ module Chesskel.Movement (
     Move (..),
     MoveContext (..),
     UnderspecifiedMove (..),
+    MinimalMove,
     PromotionTarget (..),
     CastlingData (..),
     CheckState (..),
@@ -19,7 +20,7 @@ module Chesskel.Movement (
     makeMove,
     makePromotion,
     makeNonPromotionMove,
-    makeUnderspecifiedMove,
+    makeMinimalMove,
     
     -- ** Move legality checking
     -- |Functions that find legal moves, or determine if given moves are legal.
@@ -108,12 +109,12 @@ newtype MoveAnnotation = MA T.Text deriving (Eq, Ord)
 -- |An underspecified move is a move that contains as little information as possible
 --  about the move, while hopefully still being unambiguous. This is the move specification model
 --  used in formats like PGN.
-data UnderspecifiedMove = CastleMove CastlingDirection (Maybe MoveAnnotation) | UM {
+data UnderspecifiedMove = CastleMove CastlingDirection | UM {
     -- |The destination cell. This value must always be present.
     knownToCell :: Cell,
     
-    -- |The piece that made the move. This value must always be present.
-    knownPiece :: Piece,
+    -- |The chessman that made the move. This value must always be present.
+    knownChessman :: Chessman,
     
     -- |The file of the source cell. This should only be specified if there are one or more
     --  other pieces of the same type on the same rank that could've made the move, or if
@@ -125,16 +126,19 @@ data UnderspecifiedMove = CastleMove CastlingDirection (Maybe MoveAnnotation) | 
     knownFromRank :: Maybe Rank,
     
     -- |Whether the move is a capture. This will not be validated when the move is played with
-    --  makeUnderspecifiedMove, but is necessary for the move to correctly be marked as a capture
+    --  'makeMinimalMove', but is necessary for the move to correctly be marked as a capture
     --  when exporting the SAN.
     knownIsCapture :: Bool,
     
     -- |The promotion target, if the move is a pawn promotion move.
     knownPromotionTarget :: Maybe PromotionTarget,
     
-    -- |An optional annotation for the move.
-    knownMoveAnnotation :: Maybe MoveAnnotation
+    -- |The check state, if the move is a check or checkmate.
+    knownCheckState :: Maybe CheckState
 } deriving (Eq)
+
+-- |A minimal move is a combination of an underspecified move and an optional annotation.
+type MinimalMove = (UnderspecifiedMove, Maybe MoveAnnotation)
 
 -- |The pieces that a pawn may promote to.
 data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
@@ -200,7 +204,7 @@ data MoveError =
     -- |The move was insufficiently disambiguated, making it impossible to know which piece was supposed
     --  to be moving.
     -- 
-    --  This is only applicable when 'makeUnderspecifiedMove' (or 'Chesskel.Gameplay.playUnderspecifiedMove') is used.
+    --  This is only applicable when 'makeMinimalMove' (or 'Chesskel.Gameplay.playMinimalMove') is used.
     --  A list of possible source cells is included with the error.
     InsufficientDisambiguation [Cell] |
     
@@ -221,6 +225,46 @@ instance Show Move where
 
 instance Show MoveAnnotation where
     show (MA s) = "{" ++ T.unpack s ++ "}"
+
+instance Show UnderspecifiedMove where
+    showsPrec n (CastleMove direction) = showsPrec n direction
+    showsPrec _ mv = showChessman . showFromFile . showFromRank . showCapture . showToCell . showPromotion . showCheck where
+        showChessman = sChessman (knownChessman mv)
+        showFromFile = maybe showEmpty sFile (knownFromFile mv)
+        showFromRank = maybe showEmpty sRank (knownFromRank mv)
+        showCapture = if knownIsCapture mv then showString "x" else showEmpty
+        showToCell = let Cell (f, r) = knownToCell mv in sFile f . sRank r
+        showPromotion = maybe showEmpty sPromotion (knownPromotionTarget mv)
+        showCheck = maybe showEmpty sCheck (knownCheckState mv)
+        sChessman King = showString "K"
+        sChessman Queen = showString "Q"
+        sChessman Rook = showString "R"
+        sChessman Bishop = showString "B"
+        sChessman Knight = showString "N"
+        sChessman Pawn = showEmpty
+        sFile FileA = showString "a"
+        sFile FileB = showString "b"
+        sFile FileC = showString "c"
+        sFile FileD = showString "d"
+        sFile FileE = showString "e"
+        sFile FileF = showString "f"
+        sFile FileG = showString "g"
+        sFile FileH = showString "h"
+        sRank Rank1 = showString "1"
+        sRank Rank2 = showString "2"
+        sRank Rank3 = showString "3"
+        sRank Rank4 = showString "4"
+        sRank Rank5 = showString "5"
+        sRank Rank6 = showString "6"
+        sRank Rank7 = showString "7"
+        sRank Rank8 = showString "8"
+        sPromotion PQueen = showString "=Q"
+        sPromotion PRook = showString "=R"
+        sPromotion PBishop = showString "=B"
+        sPromotion PKnight = showString "=N"
+        sCheck Check = showString "+"
+        sCheck Checkmate = showString "#"
+        showEmpty = showString ""
 
 -- |A list of all promotion targets.
 allPromotionTargets :: [PromotionTarget]
@@ -753,8 +797,8 @@ isMovePromotion _ _ = False
 
 -- |Attempts to find a source cell for an underspecified move. See disambiguateSourceCell for details.
 getSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
-getSourceCell (PC { currentPlayer = White }) (CastleMove _ _) = return e1
-getSourceCell (PC { currentPlayer = Black }) (CastleMove _ _) = return e8
+getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
+getSourceCell (PC { currentPlayer = Black }) (CastleMove _) = return e8
 getSourceCell pc unspecMove =
     case createCell <$> knownFromFile unspecMove <*> knownFromRank unspecMove of
         Just c -> return c -- If both disambiguation options are present we can return immediately.
@@ -769,7 +813,7 @@ getSourceCell pc unspecMove =
 disambiguateSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
 disambiguateSourceCell pc unspecMove =
     let toCell = knownToCell unspecMove
-        piece = knownPiece unspecMove
+        piece = (knownChessman unspecMove, currentPlayer pc)
         mFromFile = knownFromFile unspecMove
         mFromRank = knownFromRank unspecMove in
     case findCandidateSourceCells pc toCell piece mFromFile mFromRank of
@@ -797,9 +841,9 @@ findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
 --  The source file and rank will only be set if it's necessary due to ambiguity.
 --
 --  This function may give a MoveError because there's a chance that the game is invalid.
-createMinimallySpecifiedMove :: PositionContext -> MoveContext -> Either MoveError UnderspecifiedMove
+createMinimallySpecifiedMove :: PositionContext -> MoveContext -> Either MoveError MinimalMove
 createMinimallySpecifiedMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
-    Right $ CastleMove direction mAnnotation
+    Right (CastleMove direction, mAnnotation)
 createMinimallySpecifiedMove pc mc =
     -- Find candidates when we only specify the destination and the piece.
     -- If there's only a single result we don't need any disambiguation.
@@ -807,8 +851,10 @@ createMinimallySpecifiedMove pc mc =
     let fromCell = mainFromCell mc
         toCell = mainToCell mc
         piece = mainPiece mc
+        (chessman, _) = piece
         isCap = isCapture mc
         mpt = promotionTarget mc
+        mCheckState = getCheckState pc
         mAnnotation = moveAnnotation mc in
     -- In order:
     -- An empty list indicates that the move is not valid for the position. Should only happen if the game is invalid.
@@ -816,32 +862,32 @@ createMinimallySpecifiedMove pc mc =
     -- Multiple pieces can reach the square. File and/or rank disambiguation is needed.
     case findCandidateSourceCells pc toCell piece Nothing Nothing of
         [] -> Left PieceCannotReachSquare
-        [_] -> Right $ resolveSimpleDisambiguation fromCell toCell piece isCap mpt mAnnotation
-        multiple -> Right $ resolveDisambiguation fromCell toCell piece isCap mpt mAnnotation multiple
+        [_] -> Right $ resolveSimpleDisambiguation fromCell toCell chessman isCap mpt mCheckState mAnnotation
+        multiple -> Right $ resolveDisambiguation fromCell toCell chessman isCap mpt mCheckState mAnnotation multiple
 
 -- |Resolves disambiguation for a move where we only have one candidate source cell.
 --
 --  We disambiguate by file iff the piece is a pawn and the move is a capture, and never disambiguate by rank.
-resolveSimpleDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> Maybe MoveAnnotation -> UnderspecifiedMove
-resolveSimpleDisambiguation (Cell (fromFile, _)) toCell (Pawn, color) True mpt mAnnotation =
-    UM toCell (Pawn, color) (Just fromFile) Nothing True mpt mAnnotation
-resolveSimpleDisambiguation _ toCell piece isCap mpt mAnnotation =
-    UM toCell piece Nothing Nothing isCap mpt mAnnotation
+resolveSimpleDisambiguation :: Cell -> Cell -> Chessman -> Bool -> Maybe PromotionTarget -> Maybe CheckState -> Maybe MoveAnnotation -> MinimalMove
+resolveSimpleDisambiguation (Cell (fromFile, _)) toCell Pawn True mpt mCheckState mAnnotation =
+    (UM toCell Pawn (Just fromFile) Nothing True mpt mCheckState, mAnnotation)
+resolveSimpleDisambiguation _ toCell chessman isCap mpt mCheckState mAnnotation =
+    (UM toCell chessman Nothing Nothing isCap mpt mCheckState, mAnnotation)
 
 -- |Resolves disambiguation for a move where we have multiple candidate source cells.
 --
 --  We disambiguate by file if there are multiple candidates on the same rank, and by
 --  rank if there are multiple candidates on the same file. In some rare cases it's
 --  even necessary to disambiguate by both at the same time.
-resolveDisambiguation :: Cell -> Cell -> Piece -> Bool -> Maybe PromotionTarget -> Maybe MoveAnnotation -> [Cell] -> UnderspecifiedMove
-resolveDisambiguation (Cell (actualFile, actualRank)) toCell piece isCap mpt mAnnotation possibleCells =
+resolveDisambiguation :: Cell -> Cell -> Chessman -> Bool -> Maybe PromotionTarget -> Maybe CheckState -> Maybe MoveAnnotation -> [Cell] -> MinimalMove
+resolveDisambiguation (Cell (actualFile, actualRank)) toCell chessman isCap mpt mCheckState mAnnotation possibleCells =
     -- Given an actual move, figure out how much we need to disambiguate based on a given list of possible source cells.
     let candidateCells = L.delete (Cell (actualFile, actualRank)) possibleCells
         hasOnFile = hasOtherOnFile candidateCells
         hasOnRank = hasOtherOnRank candidateCells
         fileIfNecessary = if hasOnRank || (not hasOnFile && not hasOnRank) then Just actualFile else Nothing
         rankIfNecessary = if hasOnFile then Just actualRank else Nothing in
-    UM toCell piece fileIfNecessary rankIfNecessary isCap mpt mAnnotation
+    (UM toCell chessman fileIfNecessary rankIfNecessary isCap mpt mCheckState, mAnnotation)
     where
         hasOtherOnFile = any (\(Cell (file, _)) -> file == actualFile)
         hasOtherOnRank = any (\(Cell (_, rank)) -> rank == actualRank)
@@ -915,11 +961,9 @@ makePromotion pc move pt = makeMove pc move (Just pt) Nothing
 --  In addition to all the regular MoveError types, this may additionally return the
 --  'InsufficientDisambiguation' error type, indicating that the move is valid but there are multiple
 --  candidates for the move.
-makeUnderspecifiedMove :: PositionContext -> UnderspecifiedMove -> Either MoveError (MoveContext, PositionContext)
-makeUnderspecifiedMove pc (CastleMove direction mAnnotation) =
+makeMinimalMove :: PositionContext -> MinimalMove -> Either MoveError (MoveContext, PositionContext)
+makeMinimalMove pc (CastleMove direction, mAnnotation) =
     makeMove pc (kingCastlingMove (direction, currentPlayer pc)) Nothing mAnnotation
-makeUnderspecifiedMove pc unspecMove = do
+makeMinimalMove pc (unspecMove, mAnnotation) = do
     fromCell <- getSourceCell pc unspecMove
-    makeMove pc (createMove fromCell (knownToCell unspecMove)) mPromotionTarget mAnnotation where
-        mPromotionTarget = knownPromotionTarget unspecMove
-        mAnnotation = knownMoveAnnotation unspecMove
+    makeMove pc (createMove fromCell (knownToCell unspecMove)) (knownPromotionTarget unspecMove) mAnnotation

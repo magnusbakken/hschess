@@ -3,11 +3,15 @@
 module Chesskel.Formats.Common (
     file,
     rank,
-    cell
+    cell,
+    sanMove
 ) where
 
-import Chesskel.Board 
-import Control.Applicative hiding ((<|>), many)
+import Chesskel.Board
+import Chesskel.Movement
+import Control.Applicative hiding ((<|>))
+import Control.Monad
+import Data.Maybe
 import Text.Parsec
 
 -- |Parses a file (a-h).
@@ -36,3 +40,102 @@ rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
 
 -- |Parses a cell (file followed by rank).
 cell = createCell <$> file <*> rank <?> "square (a1-h8)"
+
+king = King <$ char 'K'
+queen = Queen <$ char 'Q'
+rook = Rook <$ char 'R'
+bishop = Bishop <$ char 'B'
+knight = Knight <$ char 'N'
+pawn = Pawn <$ char 'P' -- Rarely used notation, but legal.
+chessman = king <|> queen <|> rook <|> bishop <|> knight <|> pawn <?>
+    "chessman (K=King, Q=Queen, R=Rook, B=Bishop, N=Knight or P=Pawn)"
+
+check = Check <$ char '+'
+checkmate = Checkmate <$ char '#'
+checkState = check <|> checkmate <?> "check indicator (+ = check, # = checkmate)"
+
+pQueen = PQueen <$ char 'Q'
+pRook = PRook <$ char 'R'
+pBishop = PBishop <$ char 'B'
+pKnight = PKnight <$ char 'N'
+pTarget = pQueen <|> pRook <|> pBishop <|> pKnight <?>
+    "promotion target (Q=Queen, R=Rook, B=Bishop or N=Knight)"
+
+pawnPromotion = char '=' *> pTarget
+
+capture = void (char 'x')
+pawnCapture = try (file <* capture) >>= pawnMoveBody . Just
+
+pawnNonCapture = pawnMoveBody Nothing
+
+pawnMoveBody mFromFile = do
+    toCell <- cell
+    mPromotionTarget <- optionMaybe pawnPromotion
+    mCheckState <- optionMaybe checkState
+    return UM {
+        -- For pawns we have the convenient invariant that the move is a capture iff there's a file disambiguation.
+        -- Rank disambiguations are also never applicable for pawns.
+        knownChessman = Pawn,
+        knownToCell = toCell,
+        knownIsCapture = isJust mFromFile,
+        knownFromFile = mFromFile,
+        knownFromRank = Nothing,
+        knownPromotionTarget = mPromotionTarget,
+        knownCheckState = mCheckState
+    }
+
+pawnMove = pawnCapture <|> pawnNonCapture
+
+bodyEnd checkCapture mFromFile mFromRank = do
+    -- If checkCapture is false we always set mCapture to Nothing.
+    mCapture <- if checkCapture then Just <$> capture else return Nothing
+    toCell <- cell
+    return (mFromFile, mFromRank, isJust mCapture, toCell)
+
+noDisambiguation checkCapture = bodyEnd checkCapture Nothing Nothing
+fileDisambiguation checkCapture = file >>= \fromFile -> bodyEnd checkCapture (Just fromFile) Nothing
+rankDisambiguation checkCapture = rank >>= \fromRank -> bodyEnd checkCapture Nothing (Just fromRank)
+fileAndRankDisambiguation checkCapture = file >>= \fromFile -> rank >>= \fromRank -> bodyEnd checkCapture (Just fromFile) (Just fromRank)
+
+justCapture = noDisambiguation True
+justCaptureWithFile = fileDisambiguation True
+justCaptureWithRank = rankDisambiguation True
+justCaptureWithFileAndRank = fileAndRankDisambiguation True
+
+nonCapture = noDisambiguation False
+nonCaptureWithFile = fileDisambiguation False
+nonCaptureWithRank = rankDisambiguation False
+nonCaptureWithFileAndRank = fileAndRankDisambiguation False
+
+nonPawnCaptureBody = try justCaptureWithFileAndRank <|>
+                     try justCaptureWithFile <|>
+                     try justCaptureWithRank <|>
+                     try justCapture
+
+nonPawnNonCaptureBody = try nonCaptureWithFileAndRank <|>
+                        try nonCaptureWithFile <|>
+                        try nonCaptureWithRank <|>
+                        try nonCapture
+
+nonPawnMoveBody = nonPawnCaptureBody <|> nonPawnNonCaptureBody
+
+nonPawnMove = do
+    cm <- chessman
+    (mFromFile, mFromRank, moveIsCapture, toCell) <- nonPawnMoveBody
+    mCheckState <- optionMaybe checkState
+    return UM {
+        knownChessman = cm,
+        knownToCell = toCell,
+        knownIsCapture = moveIsCapture,
+        knownFromFile = mFromFile,
+        knownFromRank = mFromRank,
+        knownPromotionTarget = Nothing,
+        knownCheckState = mCheckState
+    }
+
+castleShort = CastleMove Kingside <$ (string "O-O" <|> string "0-0")
+castleLong = CastleMove Queenside <$ (string "O-O-O" <|> string "0-0-0")
+castling = try castleLong <|> castleShort
+
+-- |A parser for a single Standard Algebraic Notation move.
+sanMove = castling <|> pawnMove <|> nonPawnMove

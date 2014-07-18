@@ -23,10 +23,11 @@ library
     Chesskel.Movement
     Chesskel.Gameplay
     Chesskel.Formats
-    Chesskel.Formats.Pgn
     Chesskel.Formats.Fen
-    Chesskel.Formats.Common
+    Chesskel.Formats.Pgn
+    Chesskel.Formats.San
   other-modules:
+    Chesskel.Formats.Common
     Chesskel.Testing.Test
     Chesskel.Testing.Profiling
     Chesskel.Utils

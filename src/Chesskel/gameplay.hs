@@ -15,7 +15,7 @@ module Chesskel.Gameplay (
     -- |Functions that alter the current position of games by playing moves.
     
     playMove,
-    playUnderspecifiedMove,
+    playMinimalMove,
     playNonPromotionMove,
     playPromotion,
     
@@ -201,9 +201,9 @@ playMove move mpt mAnnotation gc = do
 --
 --  If there are multiple pieces that could've made the move, an 'InsufficientDisambiguation'
 --  will be returned, containing a list of available source cells.
-playUnderspecifiedMove :: UnderspecifiedMove -> GameContext -> Either MoveError GameContext
-playUnderspecifiedMove unspecMove gc = do
-    (mc, pc') <- makeUnderspecifiedMove (currentPosition gc) unspecMove
+playMinimalMove :: MinimalMove -> GameContext -> Either MoveError GameContext
+playMinimalMove miniMove gc = do
+    (mc, pc') <- makeMinimalMove (currentPosition gc) miniMove
     return $ updateGameContext mc pc' gc
 
 -- |Shorthand for moves that are guaranteed not to require a promotion target.
@@ -244,7 +244,7 @@ setResult result gc = gc {
 --  disambiguation needed, for the given game.
 --
 --  This may return a MoveError because the game could potentially be in an invalid state.
-createMinimallySpecifiedMoves :: GameContext -> Either MoveError [UnderspecifiedMove]
+createMinimallySpecifiedMoves :: GameContext -> Either MoveError [MinimalMove]
 createMinimallySpecifiedMoves gc = zipWithM createMinimallySpecifiedMove (positions gc) (moves gc)
 
 -- |Updates the given game with a new move, and the new position that will arise after
