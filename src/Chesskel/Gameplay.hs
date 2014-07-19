@@ -195,6 +195,15 @@ startGame pc (hd, extra) = GC {
     gameResult = Ongoing
 }
 
+-- |A generic move function used both by playMove and playMinimalMove
+playMove' :: (GameContext -> Either MoveError (MoveContext, PositionContext))
+             -> GameContext
+             -> Either MoveError GameContext
+playMove' moveFunc gc = do
+    unless (gameResult gc == Ongoing) $ Left GameIsFinished
+    (mc, pc') <- moveFunc gc
+    return $ updateGameContext mc pc' gc
+
 -- |Plays a single move, with an optional promotion target (only applicable when
 --  moving a pawn to a promotion square) and an optional move annotation.
 --
@@ -203,10 +212,8 @@ startGame pc (hd, extra) = GC {
 --  is easier, since in the event of a move error you will have some idea why the move was not
 --  allowed based on the specific MoveError.
 playMove :: Move -> Maybe PromotionTarget -> Maybe MoveAnnotation -> GameContext -> Either MoveError GameContext
-playMove move mpt mAnnotation gc = do
-    unless (gameResult gc == Ongoing) $ Left GameIsFinished
-    (mc, pc') <- makeMove (currentPosition gc) move mpt mAnnotation
-    return $ updateGameContext mc pc' gc where
+playMove move mpt mAnnotation =
+    playMove' (\gc -> makeMove (currentPosition gc) move mpt mAnnotation)
 
 -- |Plays an underspecified move. This allows you to get the functionality from
 --  e.g. PGN files where a move is specified as simply e4, without indicating the
@@ -216,9 +223,8 @@ playMove move mpt mAnnotation gc = do
 --  If there are multiple pieces that could've made the move, an 'InsufficientDisambiguation'
 --  will be returned, containing a list of available source cells.
 playMinimalMove :: MinimalMove -> GameContext -> Either MoveError GameContext
-playMinimalMove miniMove gc = do
-    (mc, pc') <- makeMinimalMove (currentPosition gc) miniMove
-    return $ updateGameContext mc pc' gc
+playMinimalMove miniMove =
+    playMove' (\gc -> makeMinimalMove (currentPosition gc) miniMove)
 
 -- |Shorthand for moves that are guaranteed not to require a promotion target.
 --

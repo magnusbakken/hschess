@@ -2,7 +2,7 @@
 module Test.Chesskel.Movement where
 
 import Assertions
-import Chesskel.Board hiding (hasPiece)
+import Chesskel.Board
 import ChessTestUtils
 import Openings
 import Test.Framework.Providers.HUnit
