@@ -41,9 +41,6 @@ test-suite chesskel-tests
   ghc-options:      -Wall
   main-is:          Test.hs
   type:             exitcode-stdio-1.0
-  other-modules:
-    Test.Chesskel.Movement
-    Test.Chesskel.Formats.Fen
   build-depends:
       base                 == 4.6.*
     , chesskel             == 0.1.0.0
