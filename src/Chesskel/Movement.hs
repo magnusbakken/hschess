@@ -37,8 +37,9 @@ module Chesskel.Movement (
     
     findAllLegalMoves,
     isLegalMove,
-    isLegalNonPromotionMove,
     isLegalPromotion,
+    isLegalNonPromotionMove,
+    isLegalMinimalMove,
     
     -- ** Game state checks
     -- |Functions that determine the current state of the position.
@@ -833,7 +834,7 @@ disambiguateSourceCell pc unspecMove =
 --
 --  If the source rank is given, only pieces on that rank will be considered.
 findCandidateSourceCells :: PositionContext -> Cell -> Piece -> Maybe File -> Maybe Rank -> [Cell]
-findCandidateSourceCells pc toCell piece mFromFile mFromRank = do
+findCandidateSourceCells pc toCell piece mFromFile mFromRank = compress $ do
     MC { mainFromCell = fromCell, mainToCell = toCell' } <- findAllLegalMoves pc
     guard $ toCell == toCell'
     let Cell (f, r) = fromCell
@@ -925,6 +926,12 @@ findAllLegalMoves pc = piecesOfColor (currentPlayer pc) (position pc) >>= findLe
 --  know what promotion target to use then any of the four alternatives will do.
 isLegalMove :: PositionContext -> Move -> Maybe PromotionTarget -> Bool
 isLegalMove pc move mpt = isRight $ getMoveContext pc move mpt Nothing
+
+-- |Determines whether the given minimal move is valid.
+--
+--  This is just shorthand for checking that makeMinimalMove doesn't give an error.
+isLegalMinimalMove :: PositionContext -> MinimalMove -> Bool
+isLegalMinimalMove pc miniMove = isRight $ makeMinimalMove pc miniMove
 
 -- |Determines whether the move identified by the given coordinates is valid.
 --

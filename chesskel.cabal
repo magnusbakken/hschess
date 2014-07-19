@@ -28,7 +28,6 @@ library
     Chesskel.Formats.San
   other-modules:
     Chesskel.Formats.Common
-    Chesskel.Testing.Test
     Chesskel.Testing.Profiling
     Chesskel.Utils
   build-depends:
@@ -43,6 +42,7 @@ test-suite chesskel-tests
   main-is:          Test.hs
   type:             exitcode-stdio-1.0
   other-modules:
+    Test.Chesskel.Movement
     Test.Chesskel.Formats.Fen
   build-depends:
       base                 == 4.6.*

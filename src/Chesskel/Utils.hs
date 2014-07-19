@@ -14,10 +14,12 @@ module Chesskel.Utils (
     wrapLines,
     maybeToEither,
     isRight,
-    interpolate
+    interpolate,
+    compress
 ) where
 
 import Data.Char (isSpace)
+import Data.List (group)
 
 trim :: String -> String
 trim = trimAndReverse . trimAndReverse
@@ -47,8 +49,17 @@ isRight :: Either e a -> Bool -- Added to Data.Either in recent GHC version.
 isRight (Right _) = True
 isRight (Left _) = False
 
+-- |Gets interpolated items strictly between two bounds. Also works for backwards ranges.
+--
+--  > interpolate 1 3 == [2]
+--  > interpolate 4 1 == [3,2]
+--  > interpolate 1 2 == []
 interpolate :: (Enum n, Ord n) => n -> n -> [n]
 interpolate from to
     | from == to = []
     | from > to = reverse (interpolate to from)
     | otherwise = [succ from..pred to]
+
+-- |Removes consecutive duplicate elements from a list.
+compress :: Eq a => [a] -> [a]
+compress = map head . group

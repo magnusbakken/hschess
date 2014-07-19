@@ -1,8 +1,11 @@
 module Main where
 
 import Test.Chesskel.Formats.Fen (allFenTests)
-import Test.Framework (defaultMain)
-import Test.Framework.Providers.HUnit (hUnitTestToTests)
+import Test.Chesskel.Movement (allMovementTests)
+import Test.Framework (testGroup, defaultMain)
 
 main :: IO ()
-main = defaultMain $ hUnitTestToTests allFenTests
+main = defaultMain [
+    testGroup "FenTests" allFenTests,
+    testGroup "MovementTests" allMovementTests
+    ]
