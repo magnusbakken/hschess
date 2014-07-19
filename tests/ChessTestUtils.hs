@@ -3,6 +3,7 @@ module ChessTestUtils (
     forcePositionFrom,
     forceGame,
     forceGameFrom,
+    forcePlaySanMove,
     isLegalSanMove
 ) where
 
