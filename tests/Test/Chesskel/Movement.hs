@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-module Test.Chesskel.Movement where
+module Test.Chesskel.Movement (
+    allMovementTests
+) where
 
 import Assertions
 import Chesskel.Board

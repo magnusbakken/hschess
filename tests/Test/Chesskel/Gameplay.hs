@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-module Test.Chesskel.Gameplay where
+module Test.Chesskel.Gameplay (
+    allGameplayTests
+) where
 
 import Assertions
 import Chesskel.Board

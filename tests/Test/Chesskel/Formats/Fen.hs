@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-module Test.Chesskel.Formats.Fen where
+module Test.Chesskel.Formats.Fen (
+    allFenTests
+) where
 
 import Chesskel.Board
 import Chesskel.Formats.Fen

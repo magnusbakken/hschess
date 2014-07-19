@@ -21,6 +21,7 @@ module Chesskel.Formats.San (
 
 import Chesskel.Formats.Common
 import Chesskel.Movement
+import Control.Applicative
 import Text.Parsec
 
 -- | An error indicating that there's something wrong with a SAN move.
@@ -32,9 +33,11 @@ mapSanMoveError :: Either ParseError a -> Either SanMoveError a
 mapSanMoveError (Right a) = Right a
 mapSanMoveError (Left e) = Left $ SanMoveSyntaxError $ "Invalid syntax: " ++ show e
 
+san = sanMove <* eof
+
 -- |Reads a single SAN move, or returns a SanMoveError if the move is syntactically invalid.
 readSanMove :: String -> Either SanMoveError UnderspecifiedMove
-readSanMove = mapSanMoveError . parse sanMove "ReadSanMove"
+readSanMove = mapSanMoveError . parse san "ReadSanMove"
 
 -- |Writes a string for a single SAN move based on an UnderspecifiedMove.
 --
