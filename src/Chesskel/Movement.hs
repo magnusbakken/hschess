@@ -450,16 +450,9 @@ getEnPassantCell _ _ _ = Nothing
 --  actually a promotion, or Nothing if no promotion is needed.
 getPromotionOrError :: Piece -> Move -> Maybe PromotionTarget -> Either MoveError (Maybe PromotionTarget)
 getPromotionOrError piece move mpt
-    | isPromotionNeeded piece move = Just <$> maybeToEither PromotionIsNeeded mpt
+    | isMovePromotion piece move = Just <$> maybeToEither PromotionIsNeeded mpt
     | isJust mpt = Left PromotionIsNotNeeded
     | otherwise = Right Nothing
-
--- |Determines if a promotion is needed for the given move, i.e. if the piece is a pawn and
---  the destination cell is the final rank on the board for that pawn.
-isPromotionNeeded :: Piece -> Move -> Bool
-isPromotionNeeded (Pawn, White) (Move (Cell (_, Rank7), Cell (_, Rank8))) = True
-isPromotionNeeded (Pawn, Black) (Move (Cell (_, Rank2), Cell (_, Rank1))) = True
-isPromotionNeeded _ _ = False
 
 -- |Performs the actual piece movement. Updates all the data in the position context based on the
 --  data in the move context. The move is assumed to be valid at this point, so all bets are off

@@ -36,7 +36,7 @@ castling = assertHasLegalMove "O-O" berlin
 enPassant = assertHasLegalMove "exd6" ["e4", "Nf6", "e5", "d5"]
 checkmate = assertIsCheckmate foolsMate
 stalemate = assertIsStalemate ["c4", "h5", "h4", "a5", "Qa4", "Ra6", "Qxa5", "Rah6", "Qxc7", "f6", "Qxd7", "Kf7", "Qxb7", "Qxd3", "Qxb8", "Qh7", "Qxc8", "Kg6", "Qe6"]
-promotion = assertHasPiece (Queen, White) a8 ["a4", "b5", "axb5", "a6", "bxa6", "Nc6", "a7", "Rb8", "a8=Q"]
+promotion = assertHasPiece whiteQueen a8 ["a4", "b5", "axb5", "a6", "bxa6", "Nc6", "a7", "Rb8", "a8=Q"]
 
 multipleCandidateKnights = assertSourceCell f3 ["Nf3", "Nf6", "d3", "d6", "Nfd2"]
 multipleCandidatePawns = assertSourceCell e4 ["e4", "d5", "c4", "e5", "exd5"]

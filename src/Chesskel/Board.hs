@@ -70,7 +70,14 @@ module Chesskel.Board (
     a5, b5, c5, d5, e5, f5, g5, h5,
     a6, b6, c6, d6, e6, f6, g6, h6,
     a7, b7, c7, d7, e7, f7, g7, h7,
-    a8, b8, c8, d8, e8, f8, g8, h8
+    a8, b8, c8, d8, e8, f8, g8, h8,
+    
+    -- ** Piece functions
+    -- |Like the cell literals, these piece functions are provided mainly for testing and
+    --  debugging purposes.
+    
+    whiteKing, whiteQueen, whiteRook, whiteBishop, whiteKnight, whitePawn,
+    blackKing, blackQueen, blackRook, blackBishop, blackKnight, blackPawn
 ) where
 
 import Control.Arrow
@@ -480,3 +487,19 @@ e8 = Cell (FileE, Rank8)
 f8 = Cell (FileF, Rank8)
 g8 = Cell (FileG, Rank8)
 h8 = Cell (FileH, Rank8)
+
+whiteKing, whiteQueen, whiteRook, whiteBishop, whiteKnight, whitePawn :: Piece
+blackKing, blackQueen, blackRook, blackBishop, blackKnight, blackPawn :: Piece
+
+whiteKing = (King, White)
+whiteQueen = (Queen, White)
+whiteRook = (Rook, White)
+whiteBishop = (Bishop, White)
+whiteKnight = (Knight, White)
+whitePawn = (Pawn, White)
+blackKing = (King, Black)
+blackQueen = (Queen, Black)
+blackRook = (Rook, Black)
+blackBishop = (Bishop, Black)
+blackKnight = (Knight, Black)
+blackPawn = (Pawn, Black)
