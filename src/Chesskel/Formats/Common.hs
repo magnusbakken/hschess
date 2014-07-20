@@ -86,7 +86,7 @@ pawnMoveBody mFromFile = do
     toCell <- cell
     mPromotionTarget <- optionMaybe pawnPromotion
     mCheckState <- optionMaybe checkState
-    return UM {
+    return MkUnderspecifiedMove {
         -- For pawns we have the convenient invariant that the move is a
         -- capture iff there's a file disambiguation.
         -- Rank disambiguations are also never applicable for pawns.
@@ -148,7 +148,7 @@ nonPawnMove = do
     cm <- chessman
     (mFromFile, mFromRank, moveIsCapture, toCell) <- nonPawnMoveBody
     mCheckState <- optionMaybe checkState
-    return UM {
+    return MkUnderspecifiedMove {
         knownChessman = cm,
         knownToCell = toCell,
         knownIsCapture = moveIsCapture,

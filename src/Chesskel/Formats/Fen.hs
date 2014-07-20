@@ -194,7 +194,7 @@ interpretFen fenToken = do
         (PreviousEnPassantCell enPassant) = previousEnPassantCellToken fenToken
         (HalfMoveClock halfMoves) = halfMoveClockToken fenToken
         (FullMoveNumber fullMoves) = fullMoveNumberToken fenToken
-    return PC {
+    return MkPositionContext {
         position = pos,
         currentPlayer = color,
         castlingRights = castling,

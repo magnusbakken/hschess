@@ -118,7 +118,9 @@ interpretHeaders = go unknownHeaderData [] where
     go hd extra (x:xs) = do
         let (tag, value) = x
         (hd', isMainTag) <- updateHeaderData hd tag value
-        if isMainTag then go hd' extra xs else go hd (uncurry EH x:extra) xs
+        if isMainTag
+            then go hd' extra xs
+            else go hd (uncurry MkExtraHeader x:extra) xs
 
 updateHeaderData :: HeaderData -> String -> String -> Either PgnError (HeaderData, Bool)
 updateHeaderData hd tag value = case tag of
@@ -161,7 +163,7 @@ annotation = do
     ann <- many (noneOf "{}")
     char '}'
     many1 space
-    return $ MA (T.replace (T.pack "\n") (T.pack " ") (T.pack ann))
+    return $ MkMoveAnnotation (T.replace (T.pack "\n") (T.pack " ") (T.pack ann))
 
 moveAndAnnotation = do
     mv <- sanMove

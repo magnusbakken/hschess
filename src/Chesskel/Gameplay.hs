@@ -66,7 +66,7 @@ data Result = WhiteWin | Draw | BlackWin | Ongoing deriving (Eq)
 
 -- |This set of headers is sometimes known as the Seven Tag Roster, or SRT.
 --  These headers are considered obligatory for all games.
-data HeaderData = HD {
+data HeaderData = MkHeaderData {
     -- |The tournament, match or league in which the game was played.
     eventHeader :: String,
     
@@ -96,7 +96,7 @@ data HeaderData = HD {
 } deriving (Eq)
 
 -- |An extra header (tag) for a game is the combination of a name and a value.
-data ExtraHeader = EH {
+data ExtraHeader = MkExtraHeader {
     -- |The name of the header.
     headerName :: String,
     
@@ -116,7 +116,7 @@ type AllHeaderData = (HeaderData, [ExtraHeader])
 --
 --  You should never modify this object directly. Always use the 'playMove'
 --  function(s) to ensure the game remains in a valid state.
-data GameContext = GC {
+data GameContext = MkGameContext {
     -- |The current position. Should always be the same as the last item in the
     --  'positions' list.
     currentPosition :: PositionContext,
@@ -163,7 +163,7 @@ instance Show HeaderData where
         "[Result \"" ++ show (resultHeader headerData) ++ "\"]"
 
 instance Show ExtraHeader where
-    show (EH { headerName = name, headerValue = value }) =
+    show (MkExtraHeader { headerName = name, headerValue = value }) =
         "[" ++ name ++ " \"" ++ value ++ "\"]"
 
 -- |Gets the result that corresponds to the given color winning.
@@ -175,7 +175,7 @@ getWin Black = BlackWin
 --  to a value indicating that they're unknown, and the result will be set as
 --  'Ongoing'.
 unknownHeaderData :: HeaderData
-unknownHeaderData = HD {
+unknownHeaderData = MkHeaderData {
     eventHeader = "??",
     siteHeader =  "??",
     dateHeader =  "??",
@@ -201,7 +201,7 @@ startStandardGame = startGame startPosition (unknownHeaderData, [])
 -- |Starts a game from the standard chess starting position,
 --  with the given header data.
 startGame :: PositionContext -> AllHeaderData -> GameContext
-startGame pc (hd, extra) = GC {
+startGame pc (hd, extra) = MkGameContext {
     currentPosition = pc,
     positions = [pc],
     moves = [],

@@ -137,7 +137,7 @@ newtype Position = Position (Squares, PositionCache) deriving (Eq)
 --  information that cannot be extrapolated from the board itself.
 --
 --  This data structure contains all the necessary information to create a FEN.
-data PositionContext = PC {
+data PositionContext = MkPositionContext {
     -- |The actual position.
     position :: Position,
     
@@ -248,8 +248,8 @@ instance Show Position where
 
 instance Show PositionContext where
     show pc = shows (position pc) ("\n" ++ showPlayerToMove pc) where
-        showPlayerToMove PC { currentPlayer = White } = "White to move"
-        showPlayerToMove PC { currentPlayer = Black } = "Black to move"
+        showPlayerToMove MkPositionContext { currentPlayer = White } = "White to move"
+        showPlayerToMove MkPositionContext { currentPlayer = Black } = "Black to move"
 
 -- |Gets the letter corresponding to the given file.
 shortFile :: File -> Char
@@ -402,7 +402,7 @@ piecesOfColor color (Position (_, PositionCache pieceMap)) =
 
 -- |The standard starting position of chess.
 startPosition :: PositionContext
-startPosition = PC {
+startPosition = MkPositionContext {
     position = standardPosition,
     currentPlayer = White,
     castlingRights = allCastlingRights,

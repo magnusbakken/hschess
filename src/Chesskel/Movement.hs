@@ -77,7 +77,7 @@ newtype Move = Move (Cell, Cell) deriving (Eq, Ord, Bounded)
 -- |A move context is a denormalized data structure that contains all the
 --  information necessary to fully reconstruct a move, provided that the
 --  position in which it was played is also available.
-data MoveContext = MC {
+data MoveContext = MkMoveContext {
     -- |The cell the piece moved from. Equivalent to the first cell in the Move
     --  type.
     --
@@ -126,12 +126,14 @@ data MoveContext = MC {
 } deriving (Eq)
 
 -- |An annotation is an arbitrary piece of text associated with a move.
-newtype MoveAnnotation = MA T.Text deriving (Eq, Ord)
+newtype MoveAnnotation = MkMoveAnnotation T.Text deriving (Eq, Ord)
 
 -- |An underspecified move is a move that contains as little information as
 --  possible about the move, while hopefully still being unambiguous. This is
 --  the move specification model used in formats like PGN.
-data UnderspecifiedMove = CastleMove CastlingDirection | UM {
+data UnderspecifiedMove =
+    CastleMove CastlingDirection |
+    MkUnderspecifiedMove {
     -- |The destination cell. This value must always be present.
     knownToCell :: Cell,
     
@@ -170,7 +172,7 @@ data PromotionTarget = PKnight | PBishop | PRook | PQueen deriving (Eq, Show)
 
 -- |A denormalized definition of castling data, containing the movement of the
 --  rook as well as the actual castling specification.
-data CastlingData = CD {
+data CastlingData = MkCastlingData {
     -- |The source cell of the rook.
     castleRookFromCell :: Cell,
     
@@ -261,7 +263,7 @@ instance Show Move where
     show (Move (fromCell, toCell)) = show fromCell ++ "-" ++ show toCell
 
 instance Show MoveAnnotation where
-    show (MA s) = "{" ++ T.unpack s ++ "}"
+    show (MkMoveAnnotation s) = "{" ++ T.unpack s ++ "}"
 
 instance Show UnderspecifiedMove where
     showsPrec n (CastleMove direction) = showsPrec n direction
@@ -329,7 +331,7 @@ getMoveContext pc (Move (fromCell, toCell)) mpt mAnnotation = do
     unless (pieceCanGetToSquare pc piece move) $ Left PieceCannotReachSquare
     mcd <- getCastlingDataIfNecessary pc piece move
     mPromotionTarget <- getPromotionOrError piece move mpt
-    let mc = MC {
+    let mc = MkMoveContext {
         mainFromCell = fromCell,
         mainToCell = toCell,
         mainPiece = piece,
@@ -387,7 +389,7 @@ getCastlingDataOrError pc castling
         let (Move (fromCell, toCell)) = rookCastlingMove castling
         guard $ validateKingForCastling pc castling
         guard $ validateRookForCastling pc (createMove fromCell toCell)
-        return $ CD fromCell toCell castling
+        return $ MkCastlingData fromCell toCell castling
 
 -- |Gets a castling specification for the given move, or Nothing if no castling
 --  is required.
@@ -498,7 +500,7 @@ rookCastlingDestination (Queenside, Black) = d8
 --  Example: If the piece is a black pawn and the move is c7-c5, this will
 --  return c6.
 getEnPassantCell :: PositionContext -> Piece -> Move -> Maybe Cell
-getEnPassantCell (PC { previousEnPassantCell = Just cell }) (Pawn, color) (Move (_, toCell))
+getEnPassantCell (MkPositionContext { previousEnPassantCell = Just cell }) (Pawn, color) (Move (_, toCell))
     | cell == toCell = Just $ getCapturedPawnCell color cell
     | otherwise = Nothing where
         getCapturedPawnCell White (Cell (file, _)) = Cell (file, Rank5)
@@ -524,7 +526,7 @@ performMove :: PositionContext -> MoveContext -> PositionContext
 performMove pc mc =
     let move = createMove (mainFromCell mc) (mainToCell mc)
         piece = mainPiece mc in
-    PC {
+    MkPositionContext {
         position = updatePosition (position pc) (getPositionUpdates mc),
         currentPlayer = otherColor (currentPlayer pc),
         castlingRights = updateCastlingRights (castlingRights pc) move,
@@ -606,8 +608,8 @@ updatePreviousEnPassantCell _ _ = Nothing
 --
 --  The count is reset if the move is a pawn move or a capture.
 updateHalfMoveClock :: Int -> MoveContext -> Int
-updateHalfMoveClock _ (MC { isCapture = True }) = 0
-updateHalfMoveClock _ (MC { mainPiece = (Pawn, _) }) = 0
+updateHalfMoveClock _ (MkMoveContext { isCapture = True }) = 0
+updateHalfMoveClock _ (MkMoveContext { mainPiece = (Pawn, _) }) = 0
 updateHalfMoveClock n _ = succ n
 
 -- |Updates the full move count of the position.
@@ -897,9 +899,12 @@ isMovePromotion _ _ = False
 
 -- |Attempts to find a source cell for an underspecified move.
 --  See disambiguateSourceCell for details.
+--
+--  This function is Chess960 incompatible, because it makes assumptions about
+--  the position of the king when castling.
 getSourceCell :: PositionContext -> UnderspecifiedMove -> Either MoveError Cell
-getSourceCell (PC { currentPlayer = White }) (CastleMove _) = return e1
-getSourceCell (PC { currentPlayer = Black }) (CastleMove _) = return e8
+getSourceCell (MkPositionContext { currentPlayer = White }) (CastleMove _) = return e1
+getSourceCell (MkPositionContext { currentPlayer = Black }) (CastleMove _) = return e8
 getSourceCell pc unspecMove =
     case createCell <$> knownFromFile unspecMove <*> knownFromRank unspecMove of
         Just c -> return c -- No ambiguity.
@@ -937,9 +942,10 @@ findCandidateSourceCells :: PositionContext
                             -> Maybe Rank
                             -> [Cell]
 findCandidateSourceCells pc toCell piece mFromFile mFromRank = compress $ do
-    MC { mainFromCell = fromCell, mainToCell = toCell' } <- findAllLegalMoves pc
-    guard $ toCell == toCell'
-    let Cell (f, r) = fromCell
+    mc <- findAllLegalMoves pc
+    guard $ toCell == mainToCell mc
+    let fromCell = mainFromCell mc
+        Cell (f, r) = fromCell
     guard $ maybe True (== f) mFromFile
     guard $ maybe True (== r) mFromRank
     guard $ hasPieceOfType piece (position pc) fromCell
@@ -956,7 +962,7 @@ createMove fromCell toCell = Move (fromCell, toCell)
 --  This function gives a MoveError (specifically `PieceCannotReachSquare`),
 --  if the game is invalid.
 createMinimalMove :: PositionContext -> MoveContext -> Either MoveError MinimalMove
-createMinimalMove _ (MC { castlingData = Just (CD { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
+createMinimalMove _ (MkMoveContext { castlingData = Just (MkCastlingData { castlingSpec = (direction, _) }), moveAnnotation = mAnnotation }) =
     Right (CastleMove direction, mAnnotation)
 createMinimalMove pc mc =
     -- Find candidates when we only specify the destination and the piece.
@@ -993,7 +999,7 @@ resolveSimpleDisambiguation :: Cell
                                -> MinimalMove
 resolveSimpleDisambiguation (Cell (fromFile, _)) toCell chessman isCap mpt mCheckState mAnnotation =
     let mFromFile = if chessman == Pawn && isCap then Just fromFile else Nothing in
-    (UM toCell chessman mFromFile Nothing isCap mpt mCheckState, mAnnotation)
+    (MkUnderspecifiedMove toCell chessman mFromFile Nothing isCap mpt mCheckState, mAnnotation)
 
 -- |Resolves disambiguation when we have multiple candidate source cells.
 --
@@ -1015,12 +1021,12 @@ resolveDisambiguation (Cell (actualFile, actualRank)) toCell chessman isCap mpt 
         hasOnFile = hasOtherOnFile candidateCells
         hasOnRank = hasOtherOnRank candidateCells
         fileIfNecessary = if hasOnRank || (not hasOnFile && not hasOnRank)
-                            then Just actualFile
-                            else Nothing
+                              then Just actualFile
+                              else Nothing
         rankIfNecessary = if hasOnFile
-                            then Just actualRank
-                            else Nothing in
-    (UM toCell chessman fileIfNecessary rankIfNecessary isCap mpt mCheckState, mAnnotation)
+                              then Just actualRank
+                              else Nothing in
+    (MkUnderspecifiedMove toCell chessman fileIfNecessary rankIfNecessary isCap mpt mCheckState, mAnnotation)
     where
         hasOtherOnFile = any (\(Cell (file, _)) -> file == actualFile)
         hasOtherOnRank = any (\(Cell (_, rank)) -> rank == actualRank)
