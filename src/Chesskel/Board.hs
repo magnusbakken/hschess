@@ -10,8 +10,8 @@ Portability : POSIX
 This module contains functions related to chess positions, pieces and cells.
 Basically everything that's \"static\", with no implication of movement,
 is placed in this model. (The 'Castling' type could be seen as an exception to
-this. It's kept in this module because of the need for keeping track of castling
-rights.)
+this. It's kept in this module because of the need for keeping track of
+castling rights.)
 -}
 module Chesskel.Board (
     Position,
@@ -56,12 +56,13 @@ module Chesskel.Board (
     
     -- ** Cell literals
     -- |These cell literals are provided for testing and debugging purposes.
-    --  It's quite useful to be able to use these to test ad-hoc moves and games:
+    --  It's quite useful to use these to test ad-hoc moves and games:
     --
     --  > playNonPromotionMove (createMove e2 e4) startStandardGame
     --
-    --  However, if they turn out to be too much a nuisance on account of having simple names that
-    --  may clash with many other variables and functions, they may be moved to a separate module.
+    --  However, if they turn out to be too much a nuisance on account of
+    --  having simple names that may clash with many other variables and
+    --  functions, they may be moved to a separate module.
     
     a1, b1, c1, d1, e1, f1, g1, h1,
     a2, b2, c2, d2, e2, f2, g2, h2,
@@ -73,8 +74,8 @@ module Chesskel.Board (
     a8, b8, c8, d8, e8, f8, g8, h8,
     
     -- ** Piece functions
-    -- |Like the cell literals, these piece functions are provided mainly for testing and
-    --  debugging purposes.
+    -- |Like the cell literals, these piece functions are provided mainly for
+    --  testing and debugging purposes.
     
     whiteKing, whiteQueen, whiteRook, whiteBishop, whiteKnight, whitePawn,
     blackKing, blackQueen, blackRook, blackBishop, blackKnight, blackPawn
@@ -89,14 +90,16 @@ import qualified Data.Set as S
 import qualified Data.Vector as V
 
 -- |A chessman is one of the six basic piece types of chess.
-data Chessman = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
+data Chessman = Pawn | Knight | Bishop | Rook | Queen | King
+    deriving (Eq, Show)
 
 -- |Each color represents one of the two players.
 --
---  Note! It may seem surprising that Color is part of the 'Ord' class, with 'White' < 'Black'.
---  The reason is that the IntMap data structure is currently used internally, and it
---  requires the data you put in it to be ordered. The Ord instance for Color should not be
---  relied upon, and may be removed in the future.
+--  Note! It may seem surprising that Color is part of the 'Ord' class, with
+--  'White' < 'Black'. The reason is that the IntMap data structure is
+--  currently used internally, and it requires the data you put in it to be
+--  ordered. The Ord instance for Color should not be relied upon, and may be
+--  removed in the future.
 data Color = White | Black deriving (Eq, Ord, Show)
 
 -- |A piece is a combination of a chessman and a color.
@@ -104,7 +107,8 @@ type Piece = (Chessman, Color)
 
 -- |A square is either a piece or Nothing.
 --
---  Squares don't know where they are on the board. To identify board coordinates you need to use the Cell type.
+--  Squares don't know where they are on the board. To identify board
+--  coordinates you need to use the Cell type.
 type Square = Maybe Piece
 
 -- |A vector of squares, currently used as the internal storage mechanism.
@@ -114,20 +118,23 @@ type Squares = V.Vector Square
 type PieceMap = IM.IntMap Piece
 
 -- |A cache data structure used for the position type.
---  This is an implementation detail, and may be changed or removed in the future.
+--  This is an implementation detail, and may be changed or removed in the
+--  future.
 newtype PositionCache = PositionCache PieceMap deriving (Eq)
 
 -- |A position represents a single setup of pieces on the chess board.
 --
---  This type is not sufficient for determining the current position of a game, since it contains
---  only the board and doesn't know anything about the current player, castling rights, etc.
---  The type that has all the remaining position information is the 'PositionContext' type.
+--  This type is not sufficient for determining the current position of a game,
+--  since it contains only the board and doesn't know anything about the
+--  current player, castling rights, etc. The type that has all the remaining
+--  position information is the 'PositionContext' type.
 --
---  This data type is abstract. Consumers should not have to care what storage mechanism is used internally.
+--  This data type is abstract. Consumers should not have to care what storage
+--  mechanism is used internally.
 newtype Position = Position (Squares, PositionCache) deriving (Eq)
 
--- |A position context is a wrapper for the 'Position' type that contains extra information
---  that cannot be extrapolated from the board itself.
+-- |A position context is a wrapper for the 'Position' type that contains extra
+--  information that cannot be extrapolated from the board itself.
 --
 --  This data structure contains all the necessary information to create a FEN.
 data PositionContext = PC {
@@ -139,40 +146,48 @@ data PositionContext = PC {
     
     -- |A set of castling rights for both players.
     --
-    --  Players lose all castling rights when they move their king, and lose castling rights on one side
-    --  when they move the rook on that side.
+    --  Players lose all castling rights when they move their king, and lose
+    --  castling rights on one side when they move the rook on that side.
     castlingRights :: S.Set Castling,
     
     -- |The previous en passant cell.
     --
-    --  When the previous move was a double pawn move, this will be the cell that was skipped.
-    --  For instance, if the previous move was white moving a pawn from d2 to d4, this will be set to d3.
+    --  When the previous move was a double pawn move, this will be the cell
+    --  that was skipped. For instance, if the previous move was white moving a
+    --  pawn from d2 to d4, this will be set to d3.
     previousEnPassantCell :: Maybe Cell,
     
-    -- |The number of half-moves (plies) since a pawn was pushed or a piece was captured.
+    -- |The number of half-moves (plies) since a pawn was moved or a piece was
+    --  captured.
     --
-    --  This number is used for the 50 move rule, which lets either player claim a draw when this number reaches 50.
+    --  This number is used for the 50 move rule, which lets either player
+    --  claim a draw when this number reaches 50.
     halfMoveClock :: Int,
     
-    -- |The number of full moves (one move by each player) since the beginning of the game.
+    -- |The number of full moves (one move by each player) since the beginning
+    --  of the game.
     moveCount :: Int
 } deriving (Eq)
 
 -- |The chess board is made up of eight ranks, numbered 1 through 8.
-data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8 deriving (Eq, Ord, Bounded, Show)
+data Rank = Rank1 | Rank2 | Rank3 | Rank4 | Rank5 | Rank6 | Rank7 | Rank8
+    deriving (Eq, Ord, Bounded, Show)
 
 -- |The chess board is made up of eight files, labeled a through h.
-data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH deriving (Eq, Ord, Bounded, Show)
+data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH
+    deriving (Eq, Ord, Bounded, Show)
 
 -- |A cell represents the coordinates of one of the tiles on the chess board.
 --
---  It's a combination of a file and a rank, and is usually designated by names such as a1, a2, etc.
+--  Cells are combinations of files and ranks, and is usually designated by
+--  names such as a1, a2, etc.
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
 
 -- |The directions in which the king can castle.
 data CastlingDirection = Kingside | Queenside deriving (Eq, Ord)
 
--- |A full specification of a castling event requires the castling direction and the player.
+-- |A full specification of a castling event requires the castling direction
+--  and the player.
 type Castling = (CastlingDirection, Color)
 
 instance Enum Rank where
@@ -216,8 +231,10 @@ instance Enum File where
 instance Enum Cell where
     fromEnum (Cell (file, rank)) = 8 * (fromEnum rank - 1) + fromEnum file - 1
     toEnum n
-        | n >= 0 && n < 64 = let (q, r) = n `quotRem` 8 in Cell (toEnum (r+1), toEnum (q+1))
-        | otherwise = error $ "tag " ++ show n ++ " is outside of bounds (0, 63)"
+        | n >= 0 && n < 64 = Cell (toEnum (r+1), toEnum (q+1))
+        | otherwise = error errMsg where
+            (q, r) = n `quotRem` 8
+            errMsg = "tag " ++ show n ++ " is outside of bounds (0, 63)"
 
 instance Show Cell where
     show (Cell (file, rank)) = [shortFile file, shortRank rank]
@@ -300,13 +317,24 @@ allCastlingRights = S.fromList [
     (Queenside, White),
     (Queenside, Black)]
 
--- |Gets a list of lists, where each list is a row from the standard starting position of chess.
+-- |Gets a list of lists, where each list is a row from the standard starting
+--  position of chess.
 startRows :: [[Square]]
-startRows = [backRow White, pawnRow White, emptyRow, emptyRow, emptyRow, emptyRow, pawnRow Black, backRow Black]
+startRows = [
+    backRow White,
+    pawnRow White,
+    emptyRow,
+    emptyRow,
+    emptyRow,
+    emptyRow,
+    pawnRow Black,
+    backRow Black]
 
 -- |Gets the back row setup for the standard starting position of chess.
 backRow :: Color -> [Square]
-backRow color = map (\chessman -> Just (chessman, color)) [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+backRow color =
+    map getPiece [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook] where
+        getPiece chessman = Just (chessman, color)
 
 -- |Gets a row full of pawns.
 pawnRow :: Color -> [Square]
@@ -318,7 +346,8 @@ emptyRow = replicate 8 Nothing
 
 -- |Gets a list of rows (list of squares) for the given position.
 getRows :: Position -> [[Square]]
-getRows (Position (vector, _)) = map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
+getRows (Position (vector, _)) =
+    map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
 
 -- |Creates a cell based on a file and rank.
 createCell :: File -> Rank -> Cell
@@ -334,21 +363,23 @@ getSquare (Position (vector, _)) cell = vector V.! fromEnum cell
 
 -- |Determines whether there's a piece at the given cell in the given position.
 hasPiece :: Position -> Cell -> Bool
-hasPiece (Position (_, PositionCache pieceMap)) cell = fromEnum cell `IM.member` pieceMap
+hasPiece (Position (_, PositionCache pieceMap)) cell =
+    fromEnum cell `IM.member` pieceMap
 
--- |Determines whether there's a piece of the given type at the given cell in the given position.
+-- |Determines whether there's a piece of some type at some cell in a position.
 hasPieceOfType :: Piece -> Position -> Cell -> Bool
 hasPieceOfType piece = hasPieceBy (== piece)
 
--- |Determines whether there's a piece of the given color at the given cell in the given position.
+-- |Determines whether there's a piece of some color at some cell in a position.
 hasPieceOfColor :: Color -> Position -> Cell -> Bool
 hasPieceOfColor color = hasPieceBy (isColor color)
 
--- |Applies a custom predicate to the piece at the given cell in the given position.
+-- |Applies a custom predicate to the piece at a given cell in the position.
 hasPieceBy :: (Piece -> Bool) -> Position -> Cell -> Bool
 hasPieceBy predicate pos cell = maybe False predicate (getSquare pos cell)
 
--- |Gets a list of pieces and their integer indices in the piece IntMap from the given squares.
+-- |Gets a list of pieces and their integer indices in the cached IntMap from
+--  the given squares.
 piecesOnly :: [Square] -> [(Int, Piece)]
 piecesOnly squares = do
     (idx, square) <- zip [0..] squares
@@ -363,7 +394,8 @@ makePieceMap = IM.fromList . piecesOnly
 getPiecesFromMap :: PieceMap -> [(Cell, Piece)]
 getPiecesFromMap = map (first toEnum) . IM.assocs
 
--- |Gets all pieces of the given color in the given position, as well as their locations.
+-- |Gets all pieces of the given color in the given position, as well as their
+--  locations in the position.
 piecesOfColor :: Color -> Position -> [(Cell, Piece)]
 piecesOfColor color (Position (_, PositionCache pieceMap)) =
     filter (isColor color . snd) $ getPiecesFromMap pieceMap
@@ -391,7 +423,8 @@ standardPosition = createPosition $ concat startRows
 --
 --  Behavior is undefined if the list doesn't have precisely 64 items in it.
 createPosition :: [Square] -> Position
-createPosition squares = Position (V.fromListN 64 squares, createPositionCache squares)
+createPosition squares =
+    Position (V.fromListN 64 squares, createPositionCache squares)
 
 -- |Creates a position cache based on the given list of squares.
 createPositionCache :: [Square] -> PositionCache
@@ -399,8 +432,9 @@ createPositionCache = PositionCache . makePieceMap
 
 -- |Updates the given position with a list of changes.
 --
---  Each update indicates what cell to change, and whether to put a piece there,
---  or to vacate the cell if the value is Nothing.
+--  Each update indicates what cell to change, and a Square object which
+--  indicates whether to put a piece there, or to vacate the cell if the value
+--  is 'Nothing'.
 updatePosition :: Position -> [(Cell, Square)] -> Position
 updatePosition (Position (board, cache)) updates =
     Position (updateBoard board updates, updatePositionCache cache updates)
@@ -490,7 +524,6 @@ h8 = Cell (FileH, Rank8)
 
 whiteKing, whiteQueen, whiteRook, whiteBishop, whiteKnight, whitePawn :: Piece
 blackKing, blackQueen, blackRook, blackBishop, blackKnight, blackPawn :: Piece
-
 whiteKing = (King, White)
 whiteQueen = (Queen, White)
 whiteRook = (Rook, White)

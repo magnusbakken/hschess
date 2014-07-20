@@ -37,7 +37,7 @@ file = cr <$> oneOf "abcdefgh" <?> "file (a-h)" where
     cr 'f' = FileF
     cr 'g' = FileG
     cr 'h' = FileH
-    cr _ = error "Should never happen. Call the police"
+    cr _ = error "Should never happen. Call the police."
 
 -- |Parses a rank (1-8).
 rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
@@ -49,7 +49,7 @@ rank = cr <$> oneOf "12345678" <?> "rank (1-8)" where
     cr '6' = Rank6
     cr '7' = Rank7
     cr '8' = Rank8
-    cr _ = error "Should never happen. Call the police"
+    cr _ = error "Should never happen. Call the police."
 
 -- |Parses a cell (file followed by rank).
 cell = createCell <$> file <*> rank <?> "square (a1-h8)"
@@ -65,7 +65,8 @@ chessman = king <|> queen <|> rook <|> bishop <|> knight <|> pawn <?>
 
 check = Check <$ char '+'
 checkmate = Checkmate <$ char '#'
-checkState = check <|> checkmate <?> "check indicator (+ = check, # = checkmate)"
+checkState = check <|> checkmate <?>
+    "check indicator (+ = check, # = checkmate)"
 
 pQueen = PQueen <$ char 'Q'
 pRook = PRook <$ char 'R'
@@ -86,7 +87,8 @@ pawnMoveBody mFromFile = do
     mPromotionTarget <- optionMaybe pawnPromotion
     mCheckState <- optionMaybe checkState
     return UM {
-        -- For pawns we have the convenient invariant that the move is a capture iff there's a file disambiguation.
+        -- For pawns we have the convenient invariant that the move is a
+        -- capture iff there's a file disambiguation.
         -- Rank disambiguations are also never applicable for pawns.
         knownChessman = Pawn,
         knownToCell = toCell,
@@ -106,9 +108,19 @@ bodyEnd checkCapture mFromFile mFromRank = do
     return (mFromFile, mFromRank, isJust mCapture, toCell)
 
 noDisambiguation checkCapture = bodyEnd checkCapture Nothing Nothing
-fileDisambiguation checkCapture = file >>= \fromFile -> bodyEnd checkCapture (Just fromFile) Nothing
-rankDisambiguation checkCapture = rank >>= \fromRank -> bodyEnd checkCapture Nothing (Just fromRank)
-fileAndRankDisambiguation checkCapture = file >>= \fromFile -> rank >>= \fromRank -> bodyEnd checkCapture (Just fromFile) (Just fromRank)
+
+fileDisambiguation checkCapture = do
+    fromFile <- file
+    bodyEnd checkCapture (Just fromFile) Nothing
+
+rankDisambiguation checkCapture = do
+    fromRank <- rank
+    bodyEnd checkCapture Nothing (Just fromRank)
+
+fileAndRankDisambiguation checkCapture = do
+    fromFile <- file
+    fromRank <- rank
+    bodyEnd checkCapture (Just fromFile) (Just fromRank)
 
 justCapture = noDisambiguation True
 justCaptureWithFile = fileDisambiguation True
@@ -148,7 +160,8 @@ nonPawnMove = do
 
 castleShort = CastleMove Kingside <$ (string "O-O" <|> string "0-0")
 castleLong = CastleMove Queenside <$ (string "O-O-O" <|> string "0-0-0")
-castling = try castleLong <|> castleShort
+castling = try castleLong <|> castleShort <?>
+    "castling (O-O or O-O-O)"
 
 -- |A parser for a single Standard Algebraic Notation move.
 sanMove = castling <|> pawnMove <|> nonPawnMove

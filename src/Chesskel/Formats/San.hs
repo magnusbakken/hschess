@@ -26,22 +26,26 @@ import Text.Parsec
 
 -- | An error indicating that there's something wrong with a SAN move.
 data SanMoveError =
-    -- |The SAN move has a syntax error. Currently this is the only type of error for SAN moves.
+    -- |The SAN move has a syntax error. Currently this is the only type of
+    --  error for SAN moves.
     SanMoveSyntaxError String deriving (Eq, Show)
 
 mapSanMoveError :: Either ParseError a -> Either SanMoveError a
 mapSanMoveError (Right a) = Right a
-mapSanMoveError (Left e) = Left $ SanMoveSyntaxError $ "Invalid syntax: " ++ show e
+mapSanMoveError (Left e) = Left $ SanMoveSyntaxError errMsg where
+    errMsg = "Invalid syntax: " ++ show e
 
 san = sanMove <* eof
 
--- |Reads a single SAN move, or returns a SanMoveError if the move is syntactically invalid.
+-- |Reads a single SAN move, or returns a SanMoveError if the move is
+--  syntactically invalid.
 readSanMove :: String -> Either SanMoveError UnderspecifiedMove
 readSanMove = mapSanMoveError . parse san "ReadSanMove"
 
 -- |Writes a string for a single SAN move based on an UnderspecifiedMove.
 --
---  Currently this function is completely equivalent to calling 'GHC.show' on the underspecified move.
---  The function is included so this SAN module has the same structure as the other format modules.
+--  Currently this function is completely equivalent to calling 'GHC.show' on
+--  the underspecified move. The function is included so this SAN module has
+--  the same structure as the other format modules.
 writeSanMove :: UnderspecifiedMove -> String
 writeSanMove = show

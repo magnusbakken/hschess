@@ -34,7 +34,7 @@ reverseBreak f xs = (reverse before, reverse after)
 wrapLine :: Int -> String -> [String]
 wrapLine maxLen line 
     | length line <= maxLen  = [line]
-    | any isSpace beforeMax  = beforeSpace : (wrapLine maxLen $ afterSpace ++ afterMax)
+    | any isSpace beforeMax  = beforeSpace : wrapLine maxLen (afterSpace ++ afterMax)
     | otherwise              = beforeMax : wrapLine maxLen afterMax where
         (beforeMax, afterMax) = splitAt maxLen line
         (beforeSpace, afterSpace) = reverseBreak isSpace beforeMax
