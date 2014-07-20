@@ -16,7 +16,7 @@ data-files:
   pgn/*.pgn
 library
   hs-source-dirs:    src/, tests/
-  ghc-options:       -O -Wall -fwarn-incomplete-patterns
+  ghc-options:       -Wall -Werror -fwarn-incomplete-patterns
   exposed-modules:
     Chesskel
     Chesskel.Board
@@ -34,16 +34,19 @@ library
       base       == 4.6.*
     , containers == 0.5.*
     , parsec     == 3.1.*
+    , QuickCheck == 2.6.*
     , text       == 0.11.*
     , vector     == 0.10.*
 test-suite chesskel-tests
   hs-source-dirs:   tests/
-  ghc-options:      -Wall
+  ghc-options:      -Wall -Werror
   main-is:          Test.hs
   type:             exitcode-stdio-1.0
   build-depends:
-      base                 == 4.6.*
-    , chesskel             == 0.1.0.0
-    , HUnit                == 1.2.*
-    , test-framework       == 0.8.*
-    , test-framework-hunit == 0.3.*
+      base                       == 4.6.*
+    , chesskel                   == 0.1.0.0
+    , HUnit                      == 1.2.*
+    , QuickCheck                 == 2.6.*
+    , test-framework             == 0.8.*
+    , test-framework-hunit       == 0.3.*
+    , test-framework-quickcheck2 == 0.3.*

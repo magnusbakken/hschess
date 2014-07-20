@@ -49,12 +49,14 @@ module Chesskel.Gameplay (
     -- ** Other
     -- |Functions that don't fit into any of the above categories.
     
-    createMinimalMoves
+    createMinimalMoves,
+    randomMoveForGame
 ) where
 
 import Chesskel.Board
 import Chesskel.Movement
 import Control.Monad
+import Test.QuickCheck.Gen
 
 -- |A result represents the outcome of a game.
 --
@@ -318,3 +320,13 @@ getNewResult pc
     | isCheckmate pc = getWin (otherColor (currentPlayer pc))
     | isStalemate pc = Draw
     | otherwise = Ongoing
+
+-- |A QuickCheck generator for playing a random move in a given game.
+-- 
+--  Uses the `randomMove` generator in "Chesskel.Movement".
+randomMoveForGame :: GameContext -> Gen GameContext
+randomMoveForGame gc = do
+    (mmc, pc) <- randomMove (currentPosition gc)
+    case mmc of
+        Nothing -> return gc
+        Just mc -> return (updateGameContext mc pc gc)

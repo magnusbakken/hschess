@@ -44,6 +44,7 @@ module Chesskel.Movement (
     -- ** Game state checks
     -- |Functions that determine the current state of the position.
     
+    isKingInCheck,
     isCheckmate,
     isStalemate,
     getCheckState,
@@ -53,17 +54,20 @@ module Chesskel.Movement (
     
     createMove,
     createMinimalMove,
+    randomMove,
 ) where
 
 import Chesskel.Board
 import Chesskel.Utils
 import Control.Applicative
+import Control.Arrow
 import Control.Monad
 import Data.Either
 import qualified Data.List as L
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
+import Test.QuickCheck.Gen
 
 -- |A move is simply a pair of coordinates (cells). Except for promotion
 --  targets for pawn moves, this is always sufficient to uniquely identify a
@@ -516,8 +520,8 @@ getPromotionOrError piece move mpt
 -- |Performs the actual piece movement. Updates all the data in the position
 --  context based on the data in the move context. The move is assumed to be
 --  valid at this point, so all bets are off if it isn't.
-movePiece :: PositionContext -> MoveContext -> PositionContext
-movePiece pc mc =
+performMove :: PositionContext -> MoveContext -> PositionContext
+performMove pc mc =
     let move = createMove (mainFromCell mc) (mainToCell mc)
         piece = mainPiece mc in
     PC {
@@ -528,6 +532,11 @@ movePiece pc mc =
         halfMoveClock = updateHalfMoveClock (halfMoveClock pc) mc,
         moveCount = updateMoveCount (moveCount pc) (currentPlayer pc)
     }
+
+-- |Same as performMove except it returns a tuple with the move and the new
+--  position rather than just the position.
+performMove' :: PositionContext -> MoveContext -> (MoveContext, PositionContext)
+performMove' pc mc = (mc, performMove pc mc)
 
 -- |Gets a list of position updates for the given move. Each update is a pair
 --  containing a cell, and either Nothing if the cell should be vacated, or the
@@ -1072,7 +1081,8 @@ makeMove :: PositionContext
             -> Maybe PromotionTarget
             -> Maybe MoveAnnotation
             -> Either MoveError (MoveContext, PositionContext)
-makeMove pc move mpt mAnnotation = (\mc -> (mc, movePiece pc mc)) <$> getMoveContext pc move mpt mAnnotation
+makeMove pc move mpt mAnnotation =
+    performMove' pc <$> getMoveContext pc move mpt mAnnotation
 
 -- |Makes a move that's guaranteed not to be a promotion.
 --
@@ -1086,9 +1096,9 @@ makeNonPromotionMove pc move = makeMove pc move Nothing Nothing
 
 -- |Makes a move that's guaranteed to be a promotion.
 --
---  If the move is valid, a MoveContext and updated PositionContext will be returned.
+--  If the move is valid, a MoveContext and new PositionContext are returned.
 --
---  If the move is invalid, a MoveError describing why the move was rejected is returned.
+--  If the move is invalid, an describing why the move was rejected is returned.
 makePromotion :: PositionContext
                  -> Move
                  -> PromotionTarget
@@ -1115,3 +1125,18 @@ makeMinimalMove pc (unspecMove, mAnnotation) = do
     fromCell <- getSourceCell pc unspecMove
     let move = createMove fromCell (knownToCell unspecMove)
     makeMove pc move (knownPromotionTarget unspecMove) mAnnotation
+
+-- |A QuickCheck generator for a random move.
+--
+--  This is faster than generating a random move with 'findAllLegalMoves' and
+--  then playing it with 'makeMove' because this function only needs to
+--  validate the move once. However, it still needs to generate every legal
+--  move in order for the randomness to be fair.
+--
+--  Note that if there are no legal moves in the position, the generator will
+--  always return a Nothing move and the same position that it started with.
+randomMove :: PositionContext -> Gen (Maybe MoveContext, PositionContext)
+randomMove pc =
+    case findAllLegalMoves pc of
+        [] -> return (Nothing, pc)
+        moves -> first Just . performMove' pc <$> elements moves

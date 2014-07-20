@@ -14,7 +14,7 @@ import Chesskel.Movement
 --  manner, with move validation faults being turned into errors. This means
 --  that when using this class with lists of strings, everything you do could
 --  potentially result in an error. Even when using it with actual GameContexts
---  most of the functions (all but `game` and `lastPosition`) are partial.
+--  most of the functions (all but game and lastPosition) are partial.
 class TestableGame g where
     game :: g -> GameContext
     

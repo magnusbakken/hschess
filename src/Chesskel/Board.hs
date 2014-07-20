@@ -91,7 +91,7 @@ import qualified Data.Vector as V
 
 -- |A chessman is one of the six basic piece types of chess.
 data Chessman = Pawn | Knight | Bishop | Rook | Queen | King
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Enum, Bounded, Show)
 
 -- |Each color represents one of the two players.
 --
@@ -100,7 +100,7 @@ data Chessman = Pawn | Knight | Bishop | Rook | Queen | King
 --  currently used internally, and it requires the data you put in it to be
 --  ordered. The Ord instance for Color should not be relied upon, and may be
 --  removed in the future.
-data Color = White | Black deriving (Eq, Ord, Show)
+data Color = White | Black deriving (Eq, Ord, Enum, Bounded, Show)
 
 -- |A piece is a combination of a chessman and a color.
 type Piece = (Chessman, Color)

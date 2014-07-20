@@ -5,9 +5,14 @@ module Test.Chesskel.Movement (
 
 import Assertions
 import Chesskel.Board
+import Chesskel.Movement
 import ChessTestUtils
 import Openings
+import QuickCheckInstances
+import Test.Framework
 import Test.Framework.Providers.HUnit
+import Test.Framework.Providers.QuickCheck2
+import Test.QuickCheck
 
 -- Move legality and promotions.
 castling = assertHasLegalMove "O-O" berlin
@@ -19,10 +24,34 @@ cannotCastleWhenLostRights = assertDoesNotHaveLegalMove "O-O" (berlin `addMoves`
 multipleCandidateKnights = assertSourceCellForMove f3 ["Nf3", "Nf6", "d3", "d6", "Nfd2"]
 multipleCandidatePawns = assertSourceCellForMove e4 ["e4", "d5", "c4", "e5", "exd5"]
 
-allMovementTests = [
+movementTests = [
     testCase "Castling" castling,
     testCase "EnPassant" enPassant,
     testCase "Promotion" promotion,
     testCase "CannotCastleWhenLostRights" cannotCastleWhenLostRights,
     testCase "MultipleCandidateKnights" multipleCandidateKnights,
     testCase "MultipleCandidatePawns" multipleCandidatePawns]
+
+extractMove :: MoveContext -> Move
+extractMove mc = createMove (mainFromCell mc) (mainToCell mc)
+
+-- Move invariants.
+prop_IsLegalMoveIsTrueForMoveFromFindAllLegalMoves = do
+    moveNum <- choose (1 :: Int, 10)
+    (mc, pc) <- arbitraryMoveForPosition moveNum
+    return (isLegalMove pc (extractMove mc) (promotionTarget mc))
+
+prop_IsLegalMoveIsFalseForMoveNotFromFindAllLegalMoves = do
+    moveNum <- choose (1 :: Int, 10)
+    pc <- arbitraryPositionContext moveNum
+    move <- arbitrary
+    move `notElem` map extractMove (findAllLegalMoves pc) ==>
+        not (isLegalMove pc move Nothing)
+
+movementProps = [
+    testProperty "IsLegalMoveIsTrueForMoveFromFindAllLegalMoves" prop_IsLegalMoveIsTrueForMoveFromFindAllLegalMoves,
+    testProperty "IsLegalMoveIsFalseForMoveNotFromFindAllLegalMoves" prop_IsLegalMoveIsFalseForMoveNotFromFindAllLegalMoves]
+
+allMovementTests = [
+    testGroup "Unit tests" movementTests,
+    testGroup "Invariant properties" movementProps]
