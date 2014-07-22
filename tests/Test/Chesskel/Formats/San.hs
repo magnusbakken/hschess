@@ -5,6 +5,7 @@ module Test.Chesskel.Formats.San (
 
 import Chesskel.Board
 import Chesskel.Movement
+import Chesskel.Movement.Minimal
 import Chesskel.Formats.San
 import Test.Framework.Providers.HUnit
 import Test.HUnit

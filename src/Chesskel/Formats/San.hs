@@ -20,7 +20,7 @@ module Chesskel.Formats.San (
 ) where
 
 import Chesskel.Formats.Common
-import Chesskel.Movement
+import Chesskel.Movement.Minimal
 import Control.Applicative
 import Text.Parsec
 

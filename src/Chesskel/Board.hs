@@ -90,25 +90,29 @@ import qualified Data.Set as S
 import qualified Data.Vector as V
 
 -- |A chessman is one of the six basic piece types of chess.
+--
+--  Note! The Chessman type is an instance of the 'Ord', 'Enum' and 'Bounded'
+--  classes for internal reasons, with 'Pawn' < 'Knight' < 'Bishop' < 'Rook'
+--  < 'Queen' < 'King'. However, these instances are not particularly logical
+--  and may be removed in the future, so they should not be relied upon.
 data Chessman = Pawn | Knight | Bishop | Rook | Queen | King
     deriving (Eq, Ord, Enum, Bounded, Show)
 
 -- |Each color represents one of the two players.
 --
---  Note! It may seem surprising that Color is part of the 'Ord' class, with
---  'White' < 'Black'. The reason is that the IntMap data structure is
---  currently used internally, and it requires the data you put in it to be
---  ordered. The Ord instance for Color should not be relied upon, and may be
---  removed in the future.
+--  Note! The Color type is an instance of the 'Ord', 'Enum' and 'Bounded'
+--  classes for internal reasons, with 'White' < 'Black'. However, these
+--  instances are not particularly logical and may be removed in the future,
+--  so they should not be relied upon.
 data Color = White | Black deriving (Eq, Ord, Enum, Bounded, Show)
 
--- |A piece is a combination of a chessman and a color.
+-- |A piece is a combination of a 'Chessman' and a 'Color'.
 type Piece = (Chessman, Color)
 
--- |A square is either a piece or Nothing.
+-- |A square is either a 'Piece' or 'Nothing'.
 --
 --  Squares don't know where they are on the board. To identify board
---  coordinates you need to use the Cell type.
+--  coordinates you need to use the 'Cell' type.
 type Square = Maybe Piece
 
 -- |A vector of squares, currently used as the internal storage mechanism.
@@ -154,7 +158,7 @@ data PositionContext = MkPositionContext {
     --
     --  When the previous move was a double pawn move, this will be the cell
     --  that was skipped. For instance, if the previous move was white moving a
-    --  pawn from d2 to d4, this will be set to d3.
+    --  pawn from 'd2' to 'd4', this will be set to 'd3'.
     previousEnPassantCell :: Maybe Cell,
     
     -- |The number of half-moves (plies) since a pawn was moved or a piece was
@@ -179,12 +183,23 @@ data File = FileA | FileB | FileC | FileD | FileE | FileF | FileG | FileH
 
 -- |A cell represents the coordinates of one of the tiles on the chess board.
 --
---  Cells are combinations of files and ranks, and is usually designated by
---  names such as a1, a2, etc.
+--  Cells are combinations of files and ranks, and are usually designated by
+--  names such as 'a1', 'a2', etc.
+--
+--  This module contains a complete set of cell literals so you can write code
+--  such as the following:
+--
+--  > getSquare standardPosition e1 == Just whiteKing
 newtype Cell = Cell (File, Rank) deriving (Eq, Ord, Bounded)
 
 -- |The directions in which the king can castle.
-data CastlingDirection = Kingside | Queenside deriving (Eq, Ord)
+--
+--  Note! The CastlingDirection type is an instance of the 'Ord', 'Enum' and
+--  'Bounded' classes for internal reasons, with 'Kingside' < 'Queenside'.
+--  However, these instances are not particularly logical and may be removed
+--  in the future, so they should not be relied upon.
+data CastlingDirection = Kingside | Queenside
+    deriving (Eq, Ord, Enum, Bounded)
 
 -- |A full specification of a castling event requires the castling direction
 --  and the player.
@@ -299,8 +314,8 @@ showRow = unwords . map showSquare
 
 -- | The opposite color of the given one.
 -- 
--- >  otherColor White == Black
--- >  otherColor Black == White
+-- > otherColor White == Black
+-- > otherColor Black == White
 otherColor :: Color -> Color
 otherColor White = Black
 otherColor Black = White
@@ -344,12 +359,16 @@ pawnRow color = replicate 8 $ Just (Pawn, color)
 emptyRow :: [Square]
 emptyRow = replicate 8 Nothing
 
--- |Gets a list of rows (list of squares) for the given position.
+-- |Gets a list of rows, each of which is a list of squares, for the given
+--  position.
 getRows :: Position -> [[Square]]
 getRows (Position (vector, _)) =
     map (\n -> V.toList $ V.slice (n*8) 8 vector) [0..7]
 
 -- |Creates a cell based on a file and rank.
+--
+--  This is just a curried version of the standard 'Cell' constructor,
+--  but it's a little more readable in many cases.
 createCell :: File -> Rank -> Cell
 createCell = curry Cell
 

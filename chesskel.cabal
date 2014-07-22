@@ -21,6 +21,7 @@ library
     Chesskel
     Chesskel.Board
     Chesskel.Movement
+    Chesskel.Movement.Minimal
     Chesskel.Gameplay
     Chesskel.Formats
     Chesskel.Formats.Fen

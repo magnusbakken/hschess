@@ -55,6 +55,7 @@ module Chesskel.Gameplay (
 
 import Chesskel.Board
 import Chesskel.Movement
+import Chesskel.Movement.Minimal
 import Control.Monad
 import Test.QuickCheck.Gen
 
@@ -194,12 +195,11 @@ allHeaderData :: GameContext -> AllHeaderData
 allHeaderData gc = (mainHeaderData gc, extraHeaderData gc)
 
 -- |Starts a standard game from the standard chess starting position,
---  without filling out anything useful in the main game headers.
+--  using 'unknownHeaderData' for the headers.
 startStandardGame :: GameContext
 startStandardGame = startGame startPosition (unknownHeaderData, [])
 
--- |Starts a game from the standard chess starting position,
---  with the given header data.
+-- |Starts a game from a custom position, with custom header data.
 startGame :: PositionContext -> AllHeaderData -> GameContext
 startGame pc (hd, extra) = MkGameContext {
     currentPosition = pc,
@@ -227,6 +227,8 @@ playMove' moveFunc gc = do
 --  play the move and handling the error is easier, since in the event of a
 --  move error you will have some idea why the move was not allowed based on
 --  the specific MoveError.
+--
+--  See 'Chesskel.Movement.makeMove' for more information.
 playMove :: Move
             -> Maybe PromotionTarget
             -> Maybe MoveAnnotation
@@ -243,6 +245,8 @@ playMove move mpt mAnnotation =
 --  If there are multiple pieces that could've made the move, an
 --  'InsufficientDisambiguation' will be returned, containing a list of
 --  available source cells.
+--
+--  See 'Chesskel.Movement.Minimal.makeMinimalMove' for more information.
 playMinimalMove :: MinimalMove -> GameContext -> Either MoveError GameContext
 playMinimalMove miniMove =
     playMove' (\gc -> makeMinimalMove (currentPosition gc) miniMove)
@@ -279,7 +283,7 @@ makeDraw = setResult Draw
 --  previously marked as finished back to 'Ongoing', or turn it from a 'Draw'
 --  into a win or vice versa.
 --
---  When possible you should use resign and makeDraw instead, as the intent
+--  When possible you should use 'resign' and 'makeDraw' instead, as the intent
 --  will be clearer.
 setResult :: Result -> GameContext -> GameContext
 setResult result gc = gc {

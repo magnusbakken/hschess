@@ -21,6 +21,7 @@ module Chesskel.Formats.Pgn (
 
 import Chesskel.Board
 import Chesskel.Movement
+import Chesskel.Movement.Minimal
 import Chesskel.Formats.Common
 import Chesskel.Gameplay
 import Chesskel.Utils

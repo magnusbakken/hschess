@@ -22,6 +22,7 @@ module Chesskel.Formats.Common (
 
 import Chesskel.Board
 import Chesskel.Movement
+import Chesskel.Movement.Minimal
 import Control.Applicative hiding ((<|>))
 import Control.Monad
 import Data.Maybe
