@@ -6,7 +6,8 @@ module Assertions (
     assertHasNoPiece,
     assertHasLegalMove,
     assertDoesNotHaveLegalMove,
-    assertSourceCellForMove
+    assertSourceCellForMove,
+    assertMoveError
 ) where
 
 import Chesskel.Board hiding (hasPiece)
@@ -49,3 +50,6 @@ assertDoesNotHaveLegalMove move g = assertBool failMessage (not $ canMove g move
 
 assertSourceCellForMove :: TestableGame g => Cell -> g -> Assertion
 assertSourceCellForMove cell g = mainFromCell (lastMove (game g)) @?= cell
+
+assertMoveError :: TestableGame g => MoveError -> String -> g -> Assertion
+assertMoveError expectedError move g = getMoveError g move @?= Just expectedError

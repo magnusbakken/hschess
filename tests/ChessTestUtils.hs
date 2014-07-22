@@ -34,6 +34,13 @@ class TestableGame g where
         case playSanMove (game g) move of
             Left _ -> False
             Right _ -> True
+            
+    getMoveError :: g -> String -> Maybe MoveError
+    getMoveError g move =
+        case playSanMove (game g) move of
+            Left (SyntaxError err) -> error $ "Invalid move: " ++ show err
+            Left (SemanticError err) -> Just err
+            Right _ -> Nothing
 
 instance TestableGame GameContext where
     game = id

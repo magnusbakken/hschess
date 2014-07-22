@@ -245,20 +245,7 @@ getMoveContext pc (Move (fromCell, toCell)) mpt mAnnotation = do
     piece <- maybeToEither NoPieceAtSourceSquare square
     unless (snd piece == currentPlayer pc) $ Left NoPieceAtSourceSquare
     let move = createMove fromCell toCell
-    unless (pieceCanGetToSquare pc piece move) $ Left PieceCannotReachSquare
-    mcd <- getCastlingDataIfNecessary pc piece move
-    mPromotionTarget <- getPromotionOrError piece move mpt
-    let mc = MkMoveContext {
-        mainFromCell = fromCell,
-        mainToCell = toCell,
-        mainPiece = piece,
-        player = currentPlayer pc,
-        isCapture = isMoveCapture (position pc) move,
-        enPassantCell = getEnPassantCell pc piece move,
-        castlingData = mcd,
-        promotionTarget = mPromotionTarget,
-        moveAnnotation = mAnnotation
-    }
+    mc <- getMoveContext' pc move mpt piece (getCastling piece move) mAnnotation
     -- This last piece of validation has to be done after the move context has
     -- been created, because we need to create a hypothetical position based on
     -- the move and see if the king is in check.
@@ -267,6 +254,64 @@ getMoveContext pc (Move (fromCell, toCell)) mpt mAnnotation = do
     -- the trouble.
     when (wouldMoveLeaveKingInCheck pc mc) $ Left MoveWouldLeaveKingInCheck
     return mc
+
+-- |Calls different functions depending on whether this is a castling move.
+getMoveContext' :: PositionContext
+                   -> Move
+                   -> Maybe PromotionTarget
+                   -> Piece
+                   -> Maybe Castling
+                   -> Maybe MoveAnnotation
+                   -> Either MoveError MoveContext
+getMoveContext' pc move mpt piece Nothing mAnnotation =
+    getNonCastlingMoveContext pc move mpt piece mAnnotation
+getMoveContext' pc move mpt _ (Just castling) mAnnotation =
+    getCastlingMoveContext pc castling move mpt mAnnotation
+
+-- |Gets a move context for a move that's guaranteed not to be a castling move.
+getNonCastlingMoveContext :: PositionContext
+                             -> Move
+                             -> Maybe PromotionTarget
+                             -> Piece
+                             -> Maybe MoveAnnotation
+                             -> Either MoveError MoveContext
+getNonCastlingMoveContext pc (Move (fromCell, toCell)) mpt piece mAnnotation = do
+    let move = createMove fromCell toCell
+    unless (pieceCanGetToSquare pc piece move) $ Left PieceCannotReachSquare
+    mPromotionTarget <- getPromotionOrError piece move mpt
+    return MkMoveContext {
+        mainFromCell = fromCell,
+        mainToCell = toCell,
+        mainPiece = piece,
+        player = currentPlayer pc,
+        isCapture = isMoveCapture (position pc) move,
+        enPassantCell = getEnPassantCell pc piece move,
+        castlingData = Nothing,
+        promotionTarget = mPromotionTarget,
+        moveAnnotation = mAnnotation
+    }
+
+-- |Gets a move context for a move that's guaranteed not to be a castling move.
+getCastlingMoveContext :: PositionContext
+                          -> Castling
+                          -> Move
+                          -> Maybe PromotionTarget
+                          -> Maybe MoveAnnotation
+                          -> Either MoveError MoveContext
+getCastlingMoveContext pc castling (Move (fromCell, toCell)) mpt mAnnotation = do
+    cd <- getCastlingDataOrError pc castling
+    when (isJust mpt) $ Left PromotionIsNotNeeded
+    return MkMoveContext {
+        mainFromCell = fromCell,
+        mainToCell = toCell,
+        mainPiece = (King, currentPlayer pc),
+        player = currentPlayer pc,
+        isCapture = False,
+        enPassantCell = Nothing,
+        castlingData = Just cd,
+        promotionTarget = Nothing,
+        moveAnnotation = mAnnotation
+    }
 
 -- |Determines whether the given move would leave the king in check. This is
 --  done by creating a hypothetical next position based on the move and
@@ -278,19 +323,6 @@ wouldMoveLeaveKingInCheck pc mc =
     -- check by the move.
     let pc' = pc { position = updatePosition (position pc) (getPositionUpdates mc) } in
     isKingInCheck (currentPlayer pc) (position pc')
-
--- |Gets castling data for the given move. Returns Nothing if no castling is
---  implied, or a MoveError if castling is necesary but not possible, e.g. if
---  the move is white king from e1 to c1 but white does not have the necessary
---  castling rights, or the rook is missing, or the move is blocked, etc.
---
---  See getCastlingDataOrError for details.
-getCastlingDataIfNecessary :: PositionContext
-                              -> Piece
-                              -> Move
-                              -> Either MoveError (Maybe CastlingData)
-getCastlingDataIfNecessary pc piece move =
-    maybe (Right Nothing) (fmap Just . getCastlingDataOrError pc) (getCastling piece move)
 
 -- |Gets castling data or an error if castling is not possible. Checks that the
 --  player has the necessary castling rights, and that both the rook and king
@@ -719,7 +751,6 @@ kingCanReachWithoutCastling (Move (Cell (fromFile, fromRank), Cell (toFile, toRa
         fromRankN = fromEnum fromRank
         toFileN = fromEnum toFile
         toRankN = fromEnum toRank
-        
 
 -- |Determines whether a bishop can make the given move.
 bishopCanReach :: Move -> Bool

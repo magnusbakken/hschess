@@ -117,8 +117,22 @@ getSourceCell (MkPositionContext { currentPlayer = White }) (CastleMove _) = ret
 getSourceCell (MkPositionContext { currentPlayer = Black }) (CastleMove _) = return e8
 getSourceCell pc unspecMove =
     case createCell <$> knownFromFile unspecMove <*> knownFromRank unspecMove of
-        Just c -> return c -- No ambiguity.
+        Just cell -> validateCellForFullySpecifiedMove pc unspecMove cell
         Nothing -> disambiguateSourceCell pc unspecMove
+
+-- |Validates an unambiguous cell. We need to check that the cell contains the
+--  piece that we were promised it does.
+--
+--  This is important in cases where a move like "Ra2a3" is specified, but the
+--  a2 cell contains a pawn instead of a rook.
+validateCellForFullySpecifiedMove :: PositionContext
+                                     -> UnderspecifiedMove
+                                     -> Cell
+                                     -> Either MoveError Cell
+validateCellForFullySpecifiedMove pc unspecMove cell = do
+    piece <- maybeToEither NoPieceAtSourceSquare $ getSquare (position pc) cell
+    unless (piece == (knownChessman unspecMove, currentPlayer pc)) $ Left NoPieceAtSourceSquare
+    return cell
 
 -- |Attempts to disambiguate the source cell for an underspecified move in
 --  cases either the source file or the source rank has been omitted.
